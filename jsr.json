@@ -1,0 +1,6 @@
+{
+  "name": "@lickle/bin",
+  "version": "0.0.1-alpha.1",
+  "license": "MIT",
+  "exports": "./src/index.ts"
+}
