@@ -19,6 +19,9 @@ export const test = b.struct({
   optional1: b.optional(b.utf8()),
   optional2: b.optional(b.utf8()),
 
+  nullable1: b.nullable(b.utf8()),
+  nullable2: b.nullable(b.utf8()),
+
   array: b.array(b.utf8()),
   tuple: b.tuple(b.uint8<1>(), b.uint16<2>(), b.uint32<3>()),
 
@@ -48,6 +51,8 @@ it('should encode and decode', () => {
     utf8: 'Some foo some bar',
     utf8Fixed: '123',
     optional2: '456',
+    nullable1: null,
+    nullable2: 'test',
     array: ['test', 'test2'],
     tuple: [1, 2, 3],
     union: ['two', [1]],

@@ -238,6 +238,17 @@ export const optional = <D, E = D>(inner: BinCode<D, E>): Optional<D, E> => ({
   s: (v) => Uint8.s + (typeof v === 'undefined' ? 0 : size(inner, v)),
 })
 
+/** Wraps a codec to make its value nullable, prefixed by a byte indicating presence. */
+export const nullable = <D, E = D>(inner: BinCode<D, E>): DynamicSize<D | null, E | null> => ({
+  e: (w, v) => {
+    if (v === null) return Uint8.e(w, 0)
+    Uint8.e(w, 1)
+    return inner.e(w, v)
+  },
+  d: (r) => (Uint8.d(r) === 0 ? null : inner.d(r)!),
+  s: (v) => Uint8.s + (v === null ? 0 : size(inner, v)),
+})
+
 /** Creates a codec for an array of items, prefixed by the array's length. */
 export const array = <D, E = D>(inner: BinCode<D, E>): DynamicSize<D[], E[]> => ({
   s: (v) => Uint32.s + v.reduce((acc, item) => acc + size(inner, item), 0),
