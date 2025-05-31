@@ -1,0 +1,83 @@
+name: Release and publish
+
+permissions:
+  contents: write
+  id-token: write
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  release_github:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+
+      - name: install dependencies
+        run: bun install
+      - name: transpile typescript
+        run: bun run build
+      - name: run tests
+        run: bun test
+      - name: Get latest release tag
+        id: latest_release_tag
+        run: |
+          latest_tag=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+          echo "tag_name=$latest_tag" >> $GITHUB_OUTPUT
+
+      - name: Get current version
+        id: current_version
+        run: echo "version=$(node -e 'console.log(require(`./package.json`).version)')" >> $GITHUB_OUTPUT
+      - name: Create a new release
+        uses: softprops/action-gh-release@v1
+        if: ${{ steps.latest_release_tag.outputs.tag_name != steps.current_version.outputs.version }}
+        with:
+          tag_name: ${{ steps.current_version.outputs.version }}
+          token: ${{ github.token }}
+  publish_npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+
+      - name: install dependencies
+        run: bun install
+      - name: transpile typescript
+        run: bun run build
+      - name: run tests
+        run: bun run test
+      - name: Get current version
+        id: current_version
+        run: echo "version=$(node -e 'console.log(require(`./package.json`).version)')" >> $GITHUB_OUTPUT
+      - name: Get latest version
+        id: latest_version
+        run: echo "version=$(npm dist-tag ls | cut -d ' ' -f 2 | xargs echo)" >> $GITHUB_OUTPUT
+      - name: npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+      - name: Publish package
+        if: ${{ steps.current_version.outputs.version != steps.latest_version.outputs.version }}
+        run: npm publish --access public --provenance
+  publish_jsr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: install dependencies
+        run: bun install
+      - name: transpile typescript
+        run: bun run build
+      - name: run tests
+        run: bun run test
+      - name: Get current version
+        id: current_version
+        run: echo "version=$(node -e 'console.log(require(`./jsr.json`).version)')" >> $GITHUB_OUTPUT
+      - name: Get latest version
+        id: latest_version
+        run: echo "version=$(npx jsr show @lickle/bin | sed -n 's/.*@\(.*@\)\([^ |]*\).*/\2/p')" >> $GITHUB_OUTPUT
+      - name: Publish package
+        if: ${{ steps.current_version.outputs.version != steps.latest_version.outputs.version }}
+        run: npx jsr publish

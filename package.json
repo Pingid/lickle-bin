@@ -1,0 +1,56 @@
+{
+  "name": "@lickle/bin",
+  "version": "0.0.1-alpha.1",
+  "description": "A tiny, efficient utility for defining binary data schemas and performing encoding/decoding of JavaScript objects to and from Uint8Array",
+  "author": "Dan Beaven <dm.beaven@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pingid/lickle-bin.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/cjs/index.js",
+  "types": "lib/ts/index.d.ts",
+  "module": "lib/esm/index.js",
+  "sideEffects": false,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./lib/ts/index.d.ts",
+      "import": "./lib/esm/index.js",
+      "require": "./lib/cjs/index.js"
+    }
+  },
+  "files": [
+    "lib",
+    "src",
+    "README.md",
+    "package.json",
+    "!**/*.test.*",
+    "tsconfig.json"
+  ],
+  "keywords": [
+    "logging",
+    "logger",
+    "debug"
+  ],
+  "scripts": {
+    "build": "npm run esm && npm run cjs",
+    "format": "prettier --write .",
+    "esm": "tsc -p ./tsconfig.esm.json",
+    "cjs": "tsc -p ./tsconfig.cjs.json",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3",
+    "vitest": "^3.0.5"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 120,
+    "trailingComma": "all"
+  }
+}
