@@ -144,7 +144,18 @@ export const BigInt64: FizedSize<8, bigint> = {
 export const bigInt64: {
   (): FizedSize<8, bigint>
   <const O extends bigint = bigint>(): FizedSize<8, O>
-} = () => BigInt64
+  <const O extends number = number>(p: { cast: 'number' }): FizedSize<8, O>
+} = (p?: { cast?: 'number' }) => {
+  if (p?.cast === 'number') {
+    const tp: FizedSize<8, number> = {
+      s: 8,
+      e: (w, v) => w.write(BigInt64.s, (b, o) => new DataView(b.buffer).setBigInt64(o, BigInt(v))),
+      d: (r) => r.read(BigInt64.s, (b, o) => Number(new DataView(b.buffer).getBigInt64(o))),
+    }
+    return tp as any
+  }
+  return BigInt64
+}
 
 /** Codec for a fixed-size 64-bit unsigned BigInt. */
 export const BigUint64: FizedSize<8, bigint> = {
@@ -156,7 +167,18 @@ export const BigUint64: FizedSize<8, bigint> = {
 export const bigUint64: {
   (): FizedSize<8, bigint>
   <const O extends bigint = bigint>(): FizedSize<8, O>
-} = () => BigUint64
+  <const O extends number = number>(p: { cast: 'number' }): FizedSize<8, O>
+} = (p?: { cast?: 'number' }) => {
+  if (p?.cast === 'number') {
+    const tp: FizedSize<8, number> = {
+      s: 8,
+      e: (w, v) => w.write(BigUint64.s, (b, o) => new DataView(b.buffer).setBigUint64(o, BigInt(v))),
+      d: (r) => r.read(BigUint64.s, (b, o) => Number(new DataView(b.buffer).getBigUint64(o))),
+    }
+    return tp as any
+  }
+  return BigUint64
+}
 
 /** Codec for a boolean value, encoded as a single byte. */
 export const Bool: FizedSize<1, boolean> = {
