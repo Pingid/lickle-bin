@@ -315,7 +315,7 @@ export const struct = <const T extends Record<string, BinCode<any>>>(
 export const partial = <S extends Record<string, any>, D, E = D>(
   inner: Schema<S, D, E>,
 ): Schema<
-  { [K in keyof S]: BinCode<Infer<S[K]['encode']> | undefined, Infer<S[K]['decode']> | undefined> },
+  { [K in keyof S]: BinCode<Infer<S[K]>['encode'] | undefined, Infer<S[K]>['decode'] | undefined> },
   Partial<D>,
   Partial<E>
 > => struct(Object.fromEntries(Object.entries(inner.schema).map(([key, value]) => [key, optional(value)]))) as any
