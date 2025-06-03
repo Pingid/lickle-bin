@@ -31,7 +31,7 @@ export type Schema<S, D, E = D> = DynamicSize<D, E> & { schema: S }
 export type BinCode<D, E = D> = FizedSize<number, D, E> | DynamicSize<D, E> | Optional<D, E>
 
 /** Extracts codec's decoded and encoded types. */
-export type TypeOf<T> = T extends Codec<infer D, infer E> ? { decode: D; encode: E } : never
+export type Infer<T> = T extends Codec<infer D, infer E> ? { decode: D; encode: E } : never
 
 /** Calculates the byte size of a value using its codec. */
 const size = <E, N extends number = number>(codec: FizedSize<N, any, E> | DynamicSize<any, E>, value: E) =>
@@ -287,13 +287,13 @@ export const array = <D, E = D>(inner: BinCode<D, E>): DynamicSize<D[], E[]> => 
 
 type StructDecode<O extends Record<string, BinCode<any>>> = Compute<
   {
-    [K in keyof O as O[K] extends Optional<any> ? K : never]?: TypeOf<O[K]>['decode']
-  } & { [K in keyof O as O[K] extends Optional<any> ? never : K]: TypeOf<O[K]>['decode'] }
+    [K in keyof O as O[K] extends Optional<any> ? K : never]?: Infer<O[K]>['decode']
+  } & { [K in keyof O as O[K] extends Optional<any> ? never : K]: Infer<O[K]>['decode'] }
 >
 type StructEncode<O extends Record<string, BinCode<any>>> = Compute<
   {
-    [K in keyof O as O[K] extends Optional<any> ? K : never]?: TypeOf<O[K]>['encode']
-  } & { [K in keyof O as O[K] extends Optional<any> ? never : K]: TypeOf<O[K]>['encode'] }
+    [K in keyof O as O[K] extends Optional<any> ? K : never]?: Infer<O[K]>['encode']
+  } & { [K in keyof O as O[K] extends Optional<any> ? never : K]: Infer<O[K]>['encode'] }
 >
 /** Creates a codec for an object from a shape of codecs. */
 export const struct = <const T extends Record<string, BinCode<any>>>(
@@ -311,10 +311,19 @@ export const struct = <const T extends Record<string, BinCode<any>>>(
   },
 })
 
+/** Creates a codec for a partial object, where some fields may be missing. */
+export const partial = <S extends Record<string, any>, D, E = D>(
+  inner: Schema<S, D, E>,
+): Schema<
+  { [K in keyof S]: BinCode<Infer<S[K]['encode']> | undefined, Infer<S[K]['decode']> | undefined> },
+  Partial<D>,
+  Partial<E>
+> => struct(Object.fromEntries(Object.entries(inner.schema).map(([key, value]) => [key, optional(value)]))) as any
+
 /** Creates a codec for a fixed-length array with elements of specific types. */
 export const tuple = <const T extends BinCode<any>[]>(
   ...shape: T
-): Schema<T, { [K in keyof T]: TypeOf<T[K]>['decode'] }, { [K in keyof T]: TypeOf<T[K]>['encode'] }> => ({
+): Schema<T, { [K in keyof T]: Infer<T[K]>['decode'] }, { [K in keyof T]: Infer<T[K]>['encode'] }> => ({
   schema: shape,
   s: (v) => v.reduce((acc, item, i) => acc + size(shape[i]!, item), 0),
   e: (w, v) => {
@@ -328,12 +337,12 @@ export const tuple = <const T extends BinCode<any>[]>(
 })
 
 /** Creates a codec for a tagged union, prefixed by a byte indicating the type. */
-export function union<const T extends Record<string, BinCode<any>>>(
+export function taggedUnion<const T extends Record<string, BinCode<any>>>(
   shape: T,
 ): Schema<
   T,
-  { [K in keyof T]: [K, TypeOf<T[K]>['decode']] }[keyof T],
-  { [K in keyof T]: [K, TypeOf<T[K]>['encode']] }[keyof T]
+  { [K in keyof T]: [K, Infer<T[K]>['decode']] }[keyof T],
+  { [K in keyof T]: [K, Infer<T[K]>['encode']] }[keyof T]
 > {
   const keys = Object.keys(shape) as (keyof T)[]
   return {
@@ -354,7 +363,7 @@ export function union<const T extends Record<string, BinCode<any>>>(
 export const descriminatedUnion = <T extends string, S extends Schema<{ [K in T]: Literal<any> }, any, any>[]>(
   tag: T,
   schema: S,
-): Schema<S, TypeOf<S[number]>['decode'], TypeOf<S[number]>['encode']> => {
+): Schema<S, Infer<S[number]>['decode'], Infer<S[number]>['encode']> => {
   const keys = schema.map((s) => s.schema[tag].value)
   return {
     schema,
@@ -430,7 +439,7 @@ export const decode = <T>(bincode: BinCode<T>, value: Uint8Array): T => bincode.
 export const read = <const A extends BinCode<any, any>[], R extends Reader>(
   reader: R,
   ...codes: A
-): [R, ...{ [K in keyof A]: TypeOf<A[K]>['decode'] }] => {
+): [R, ...{ [K in keyof A]: Infer<A[K]>['decode'] }] => {
   const result: any = []
   for (let i = 0; i < codes.length; i++) {
     result.push(codes[i]!.d(reader))

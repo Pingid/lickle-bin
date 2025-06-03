@@ -13,6 +13,8 @@ export const test = b.struct({
   float64: b.float64(),
   bigInt64: b.bigInt64(),
   bigUint64: b.bigUint64(),
+  bigInt64Num: b.bigInt64({ cast: 'number' }),
+  bigUint64Num: b.bigUint64({ cast: 'number' }),
 
   utf8: b.utf8(),
   utf8Fixed: b.utf8({ fixed: 3 }),
@@ -24,8 +26,10 @@ export const test = b.struct({
 
   array: b.array(b.utf8()),
   tuple: b.tuple(b.uint8<1>(), b.uint16<2>(), b.uint32<3>()),
+  struct: b.struct({ a: b.utf8(), b: b.utf8(), optional: b.optional(b.utf8()) }),
+  partial: b.partial(b.struct({ a: b.utf8(), b: b.utf8(), optional: b.optional(b.utf8()) })),
 
-  union: b.union({
+  union: b.taggedUnion({
     one: b.struct({ type: b.uint8(), name: b.utf8() }),
     two: b.array(b.uint8()),
   }),
@@ -37,7 +41,8 @@ export const test = b.struct({
 })
 
 it('should encode and decode', () => {
-  const value: b.TypeOf<typeof test>['encode'] = {
+  type Encode = b.Infer<typeof test>['encode']
+  const value: Encode = {
     uint8: 10,
     uint16: 10,
     uint32: 10,
@@ -48,6 +53,8 @@ it('should encode and decode', () => {
     float64: 10,
     bigInt64: 10n,
     bigUint64: 10n,
+    bigInt64Num: 10,
+    bigUint64Num: 10,
     utf8: 'Some foo some bar',
     utf8Fixed: '123',
     optional2: '456',
@@ -55,6 +62,8 @@ it('should encode and decode', () => {
     nullable2: 'test',
     array: ['test', 'test2'],
     tuple: [1, 2, 3],
+    struct: { b: 'bar', a: 'foo' },
+    partial: { a: 'foo', optional: 'test' },
     union: ['two', [1]],
     descriminatedUnion: { tag: 'a', a: 'foo' },
   }
