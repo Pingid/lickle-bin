@@ -298,12 +298,12 @@ export const array = <D, E = D>(inner: BinCode<D, E>): DynamicSize<D[], E[]> => 
   },
 })
 
-type StructDecode<O extends Record<string, BinCode<any>>> = Compute<
+type StructDecode<O> = Compute<
   {
     -readonly [K in keyof O as O[K] extends Optional<any> ? K : never]?: Infer<O[K]>['decode']
   } & { -readonly [K in keyof O as O[K] extends Optional<any> ? never : K]: Infer<O[K]>['decode'] }
 >
-type StructEncode<O extends Record<string, BinCode<any>>> = Compute<
+type StructEncode<O> = Compute<
   {
     -readonly [K in keyof O as O[K] extends Optional<any> ? K : never]?: Infer<O[K]>['encode']
   } & { -readonly [K in keyof O as O[K] extends Optional<any> ? never : K]: Infer<O[K]>['encode'] }
@@ -327,11 +327,21 @@ export const struct = <const T extends Record<string, BinCode<any>>>(
 /** Creates a codec for a partial object, where some fields may be missing. */
 export const partial = <S extends Record<string, any>, D, E = D>(
   inner: Schema<S, D, E>,
+): Schema<{ [K in keyof S]: Optional<Infer<S[K]>['encode'], Infer<S[K]>['decode']> }, Partial<D>, Partial<E>> =>
+  struct(Object.fromEntries(Object.entries(inner.schema).map(([key, value]) => [key, optional(value)]))) as any
+
+type UnionToIntersection<U> = (U extends any ? (x: U) => void : never) extends (x: infer I) => void ? I : never
+
+/** Creates a codec for the intersection of multiple struct schemas. */
+export const intersection = <T extends Schema<Record<string, any>, any, any>[]>(
+  schemas: T,
 ): Schema<
-  { [K in keyof S]: BinCode<Infer<S[K]>['encode'] | undefined, Infer<S[K]>['decode'] | undefined> },
-  Partial<D>,
-  Partial<E>
-> => struct(Object.fromEntries(Object.entries(inner.schema).map(([key, value]) => [key, optional(value)]))) as any
+  Compute<UnionToIntersection<T[number]['schema']>>,
+  StructDecode<Compute<UnionToIntersection<T[number]['schema']>>>,
+  StructEncode<Compute<UnionToIntersection<T[number]['schema']>>>
+> => {
+  return struct(Object.fromEntries(schemas.map((s) => Object.entries(s.schema)).flat())) as any
+}
 
 /** Creates a codec for a fixed-length array with elements of specific types. */
 export const tuple = <const T extends BinCode<any>[]>(

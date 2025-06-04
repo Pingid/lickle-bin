@@ -1,6 +1,6 @@
 {
   "name": "@lickle/bin",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A tiny, efficient utility for defining binary data schemas and performing encoding/decoding of JavaScript objects to and from Uint8Array",
   "author": "Dan Beaven <dm.beaven@gmail.com>",
   "repository": {

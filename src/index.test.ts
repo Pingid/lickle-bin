@@ -40,6 +40,7 @@ export const test = b.struct({
   ]),
 
   json: b.json<{ a: string; b: number }>(),
+  intersection: b.intersection([b.struct({ a: b.utf8() }), b.partial(b.struct({ b: b.utf8() }))]),
 })
 
 it('should encode and decode', () => {
@@ -69,6 +70,7 @@ it('should encode and decode', () => {
     taggedUnion: ['two', [1]],
     descriminatedUnion: { tag: 'a', a: 'foo' },
     json: { a: 'foo', b: 10 },
+    intersection: { a: 'foo', b: 'bar' },
   }
   const encoded = b.encode(test, value)
   const decoded = b.decode(test, encoded)
@@ -111,6 +113,7 @@ export type EncodeTypeInferTests = [
     Equal<b.Infer<typeof test.schema.descriminatedUnion>['encode'], { tag: 'a'; a: string } | { tag: 'b'; b: string }>
   >,
   Assert<Equal<b.Infer<typeof test.schema.json>['encode'], { a: string; b: number }>>,
+  Assert<Equal<b.Infer<typeof test.schema.intersection>['encode'], { a: string; b?: string }>>,
 ]
 
 export type DecodeTypeInferTests = [
@@ -146,4 +149,5 @@ export type DecodeTypeInferTests = [
     Equal<b.Infer<typeof test.schema.descriminatedUnion>['decode'], { tag: 'a'; a: string } | { tag: 'b'; b: string }>
   >,
   Assert<Equal<b.Infer<typeof test.schema.json>['decode'], { a: string; b: number }>>,
+  Assert<Equal<b.Infer<typeof test.schema.intersection>['decode'], { a: string; b?: string }>>,
 ]
