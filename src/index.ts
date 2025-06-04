@@ -189,7 +189,7 @@ export const Bool: FizedSize<1, boolean> = {
 /** Creates a codec for a boolean value. */
 export const bool = (): FizedSize<1, boolean> => Bool
 
-/** Codec for a dynamic or fixed-size UTF-8 encoded string. */
+/** Codec for a dynamic-sized UTF-8 encoded string with max length of 2^32-1. */
 export const Utf8: DynamicSize<string> = {
   s: (v) => new TextEncoder().encode(v).length + Uint32.s,
   e: (w, v) => {
@@ -199,7 +199,7 @@ export const Utf8: DynamicSize<string> = {
   d: (r) => r.read(Uint32.d(r), (b, o, e) => new TextDecoder().decode(b.slice(o, e))),
 }
 
-/** Creates a codec for a dynamic or fixed-size UTF-8 encoded string. */
+/** Creates a codec for a dynamic-sized UTF-8 encoded string with max length of 2^32-1. */
 export const utf8: {
   (): DynamicSize<string>
   <const O extends string = string>(): DynamicSize<O>
@@ -216,6 +216,17 @@ export const utf8: {
   }
   return Utf8
 }
+
+/** Creates a codec for a dynamic-sized JSON encoded string. */
+export const json = <T>(): DynamicSize<T, T> => ({
+  s: (v) => new TextEncoder().encode(JSON.stringify(v)).length + Uint32.s,
+  e: (w, v) => {
+    const str = JSON.stringify(v)
+    Uint32.e(w, str.length)
+    w.write(str.length, (b, o) => b.set(new TextEncoder().encode(str), o))
+  },
+  d: (r) => r.read(Uint32.d(r), (b, o, e) => JSON.parse(new TextDecoder().decode(b.slice(o, e)))),
+})
 
 /** Codec for a dynamic or fixed-size byte array. */
 export const Bytes: DynamicSize<Uint8Array> = {

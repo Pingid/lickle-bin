@@ -38,6 +38,8 @@ export const test = b.struct({
     b.struct({ tag: b.literal('a'), a: b.utf8() }),
     b.struct({ tag: b.literal('b'), b: b.utf8() }),
   ]),
+
+  json: b.json<{ a: string; b: number }>(),
 })
 
 it('should encode and decode', () => {
@@ -66,6 +68,7 @@ it('should encode and decode', () => {
     partial: { a: 'foo', optional: 'test' },
     union: ['two', [1]],
     descriminatedUnion: { tag: 'a', a: 'foo' },
+    json: { a: 'foo', b: 10 },
   }
   const encoded = b.encode(test, value)
   const decoded = b.decode(test, encoded)

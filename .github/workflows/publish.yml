@@ -72,4 +72,4 @@ jobs:
       - name: run tests
         run: bun run test
       - name: Publish package
-        run: npx jsr publish
+        run: bun jsr publish
