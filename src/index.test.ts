@@ -13,7 +13,7 @@ export const test = b.struct({
   float64: b.float64(),
   bigInt64: b.bigInt64(),
   bigUint64: b.bigUint64(),
-  bigInt64Num: b.bigInt64({ cast: 'number' }),
+  bigInt64Num: b.bigInt64<10>({ cast: 'number' }),
   bigUint64Num: b.bigUint64({ cast: 'number' }),
 
   utf8: b.utf8(),
@@ -29,7 +29,7 @@ export const test = b.struct({
   struct: b.struct({ a: b.utf8(), b: b.utf8(), optional: b.optional(b.utf8()) }),
   partial: b.partial(b.struct({ a: b.utf8(), b: b.utf8(), optional: b.optional(b.utf8()) })),
 
-  union: b.taggedUnion({
+  taggedUnion: b.taggedUnion({
     one: b.struct({ type: b.uint8(), name: b.utf8() }),
     two: b.array(b.uint8()),
   }),
@@ -66,7 +66,7 @@ it('should encode and decode', () => {
     tuple: [1, 2, 3],
     struct: { b: 'bar', a: 'foo' },
     partial: { a: 'foo', optional: 'test' },
-    union: ['two', [1]],
+    taggedUnion: ['two', [1]],
     descriminatedUnion: { tag: 'a', a: 'foo' },
     json: { a: 'foo', b: 10 },
   }
@@ -74,3 +74,76 @@ it('should encode and decode', () => {
   const decoded = b.decode(test, encoded)
   expect(decoded).toEqual(value)
 })
+
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+type Assert<T extends true> = T
+
+export type EncodeTypeInferTests = [
+  Assert<Equal<b.Infer<typeof test.schema.uint8>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.uint16>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.uint32>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.int8>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.int16>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.int32>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.float32>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.float64>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.bigInt64>['encode'], bigint>>,
+  Assert<Equal<b.Infer<typeof test.schema.bigUint64>['encode'], bigint>>,
+  Assert<Equal<b.Infer<typeof test.schema.bigInt64Num>['encode'], 10>>,
+  Assert<Equal<b.Infer<typeof test.schema.bigUint64Num>['encode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.utf8>['encode'], string>>,
+  Assert<Equal<b.Infer<typeof test.schema.utf8Fixed>['encode'], string>>,
+  Assert<Equal<b.Infer<typeof test.schema.optional1>['encode'], string | undefined>>,
+  Assert<Equal<b.Infer<typeof test.schema.optional2>['encode'], string | undefined>>,
+  Assert<Equal<b.Infer<typeof test.schema.nullable1>['encode'], string | null>>,
+  Assert<Equal<b.Infer<typeof test.schema.nullable2>['encode'], string | null>>,
+  Assert<Equal<b.Infer<typeof test.schema.array>['encode'], string[]>>,
+  Assert<Equal<b.Infer<typeof test.schema.tuple>['encode'], [1, 2, 3]>>,
+  Assert<Equal<b.Infer<typeof test.schema.struct>['encode'], { a: string; b: string; optional?: string }>>,
+  Assert<Equal<b.Infer<typeof test.schema.partial>['encode'], { a?: string; b?: string; optional?: string }>>,
+  Assert<
+    Equal<
+      b.Infer<typeof test.schema.taggedUnion>['encode'],
+      ['two', number[]] | ['one', { type: number; name: string }]
+    >
+  >,
+  Assert<
+    Equal<b.Infer<typeof test.schema.descriminatedUnion>['encode'], { tag: 'a'; a: string } | { tag: 'b'; b: string }>
+  >,
+  Assert<Equal<b.Infer<typeof test.schema.json>['encode'], { a: string; b: number }>>,
+]
+
+export type DecodeTypeInferTests = [
+  Assert<Equal<b.Infer<typeof test.schema.uint8>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.uint16>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.uint32>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.int8>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.int16>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.int32>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.float32>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.float64>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.bigInt64>['decode'], bigint>>,
+  Assert<Equal<b.Infer<typeof test.schema.bigUint64>['decode'], bigint>>,
+  Assert<Equal<b.Infer<typeof test.schema.bigInt64Num>['decode'], 10>>,
+  Assert<Equal<b.Infer<typeof test.schema.bigUint64Num>['decode'], number>>,
+  Assert<Equal<b.Infer<typeof test.schema.utf8>['decode'], string>>,
+  Assert<Equal<b.Infer<typeof test.schema.utf8Fixed>['decode'], string>>,
+  Assert<Equal<b.Infer<typeof test.schema.optional1>['decode'], string | undefined>>,
+  Assert<Equal<b.Infer<typeof test.schema.optional2>['decode'], string | undefined>>,
+  Assert<Equal<b.Infer<typeof test.schema.nullable1>['decode'], string | null>>,
+  Assert<Equal<b.Infer<typeof test.schema.nullable2>['decode'], string | null>>,
+  Assert<Equal<b.Infer<typeof test.schema.array>['decode'], string[]>>,
+  Assert<Equal<b.Infer<typeof test.schema.tuple>['decode'], [1, 2, 3]>>,
+  Assert<Equal<b.Infer<typeof test.schema.struct>['decode'], { a: string; b: string; optional?: string }>>,
+  Assert<Equal<b.Infer<typeof test.schema.partial>['decode'], { a?: string; b?: string; optional?: string }>>,
+  Assert<
+    Equal<
+      b.Infer<typeof test.schema.taggedUnion>['decode'],
+      ['two', number[]] | ['one', { type: number; name: string }]
+    >
+  >,
+  Assert<
+    Equal<b.Infer<typeof test.schema.descriminatedUnion>['decode'], { tag: 'a'; a: string } | { tag: 'b'; b: string }>
+  >,
+  Assert<Equal<b.Infer<typeof test.schema.json>['decode'], { a: string; b: number }>>,
+]

@@ -144,7 +144,8 @@ export const BigInt64: FizedSize<8, bigint> = {
 export const bigInt64: {
   (): FizedSize<8, bigint>
   <const O extends bigint = bigint>(): FizedSize<8, O>
-  <const O extends number = number>(p: { cast: 'number' }): FizedSize<8, O>
+  (p: { cast: 'number' }): FizedSize<8, number>
+  <const O extends number>(p: { cast: 'number' }): FizedSize<8, O>
 } = (p?: { cast?: 'number' }) => {
   if (p?.cast === 'number') {
     const tp: FizedSize<8, number> = {
@@ -167,7 +168,8 @@ export const BigUint64: FizedSize<8, bigint> = {
 export const bigUint64: {
   (): FizedSize<8, bigint>
   <const O extends bigint = bigint>(): FizedSize<8, O>
-  <const O extends number = number>(p: { cast: 'number' }): FizedSize<8, O>
+  (p: { cast: 'number' }): FizedSize<8, number>
+  <const O extends number>(p: { cast: 'number' }): FizedSize<8, O>
 } = (p?: { cast?: 'number' }) => {
   if (p?.cast === 'number') {
     const tp: FizedSize<8, number> = {
@@ -298,13 +300,13 @@ export const array = <D, E = D>(inner: BinCode<D, E>): DynamicSize<D[], E[]> => 
 
 type StructDecode<O extends Record<string, BinCode<any>>> = Compute<
   {
-    [K in keyof O as O[K] extends Optional<any> ? K : never]?: Infer<O[K]>['decode']
-  } & { [K in keyof O as O[K] extends Optional<any> ? never : K]: Infer<O[K]>['decode'] }
+    -readonly [K in keyof O as O[K] extends Optional<any> ? K : never]?: Infer<O[K]>['decode']
+  } & { -readonly [K in keyof O as O[K] extends Optional<any> ? never : K]: Infer<O[K]>['decode'] }
 >
 type StructEncode<O extends Record<string, BinCode<any>>> = Compute<
   {
-    [K in keyof O as O[K] extends Optional<any> ? K : never]?: Infer<O[K]>['encode']
-  } & { [K in keyof O as O[K] extends Optional<any> ? never : K]: Infer<O[K]>['encode'] }
+    -readonly [K in keyof O as O[K] extends Optional<any> ? K : never]?: Infer<O[K]>['encode']
+  } & { -readonly [K in keyof O as O[K] extends Optional<any> ? never : K]: Infer<O[K]>['encode'] }
 >
 /** Creates a codec for an object from a shape of codecs. */
 export const struct = <const T extends Record<string, BinCode<any>>>(

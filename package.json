@@ -1,6 +1,6 @@
 {
   "name": "@lickle/bin",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A tiny, efficient utility for defining binary data schemas and performing encoding/decoding of JavaScript objects to and from Uint8Array",
   "author": "Dan Beaven <dm.beaven@gmail.com>",
   "repository": {
@@ -35,10 +35,11 @@
     "decoding"
   ],
   "scripts": {
-    "build": "npm run esm && npm run cjs",
+    "build": "npm run typecheck && npm run esm && npm run cjs",
     "format": "prettier --write .",
     "esm": "tsc -p ./tsconfig.esm.json",
     "cjs": "tsc -p ./tsconfig.cjs.json",
+    "typecheck": "tsc --noEmit",
     "test": "vitest"
   },
   "devDependencies": {
