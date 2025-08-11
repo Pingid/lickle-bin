@@ -380,7 +380,7 @@ export function taggedUnion<const T extends Record<string, BinCode<any>>>(
 }
 
 /** Creates a codec for a discriminated union, prefixed by a byte indicating the type. */
-export const descriminatedUnion = <T extends string, S extends Schema<{ [K in T]: Literal<any> }, any, any>[]>(
+export const discriminatedUnion = <T extends string, S extends Schema<{ [K in T]: Literal<any> }, any, any>[]>(
   tag: T,
   schema: S,
 ): Schema<S, Infer<S[number]>['decode'], Infer<S[number]>['encode']> => {

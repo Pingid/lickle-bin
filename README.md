@@ -41,7 +41,7 @@ const MyDataSchema = c.struct({
     stringData: c.utf8(),
     numberData: c.float64(),
   }),
-  message: c.descriminatedUnion('type', [
+  message: c.discriminatedUnion('type', [
     // Discriminated union
     c.struct({ type: c.literal('text'), content: c.utf8() }),
     c.struct({ type: c.literal('image'), url: c.utf8(), size: c.uint32() }),

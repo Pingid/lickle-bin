@@ -34,7 +34,7 @@ export const test = b.struct({
     two: b.array(b.uint8()),
   }),
 
-  descriminatedUnion: b.descriminatedUnion('tag', [
+  discriminatedUnion: b.discriminatedUnion('tag', [
     b.struct({ tag: b.literal('a'), a: b.utf8() }),
     b.struct({ tag: b.literal('b'), b: b.utf8() }),
   ]),
@@ -68,7 +68,7 @@ it('should encode and decode', () => {
     struct: { b: 'bar', a: 'foo' },
     partial: { a: 'foo', optional: 'test' },
     taggedUnion: ['two', [1]],
-    descriminatedUnion: { tag: 'a', a: 'foo' },
+    discriminatedUnion: { tag: 'a', a: 'foo' },
     json: { a: 'foo', b: 10 },
     intersection: { a: 'foo', b: 'bar' },
   }
@@ -110,7 +110,7 @@ export type EncodeTypeInferTests = [
     >
   >,
   Assert<
-    Equal<b.Infer<typeof test.schema.descriminatedUnion>['encode'], { tag: 'a'; a: string } | { tag: 'b'; b: string }>
+    Equal<b.Infer<typeof test.schema.discriminatedUnion>['encode'], { tag: 'a'; a: string } | { tag: 'b'; b: string }>
   >,
   Assert<Equal<b.Infer<typeof test.schema.json>['encode'], { a: string; b: number }>>,
   Assert<Equal<b.Infer<typeof test.schema.intersection>['encode'], { a: string; b?: string }>>,
@@ -146,7 +146,7 @@ export type DecodeTypeInferTests = [
     >
   >,
   Assert<
-    Equal<b.Infer<typeof test.schema.descriminatedUnion>['decode'], { tag: 'a'; a: string } | { tag: 'b'; b: string }>
+    Equal<b.Infer<typeof test.schema.discriminatedUnion>['decode'], { tag: 'a'; a: string } | { tag: 'b'; b: string }>
   >,
   Assert<Equal<b.Infer<typeof test.schema.json>['decode'], { a: string; b: number }>>,
   Assert<Equal<b.Infer<typeof test.schema.intersection>['decode'], { a: string; b?: string }>>,
