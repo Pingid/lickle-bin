@@ -15,98 +15,92 @@ Install the `@lickle/bin` library using your preferred package manager:
 npm install @lickle/bin
 ```
 
-## Usage
+## 🚀 Quick Start
 
-Define your data structures using `c.struct` and other provided codec primitives. Then, use `encode` and `decode` to convert between JavaScript objects and `Uint8Array`.
-
-### Defining Schemas
-
-```typescript
+```ts
 import * as c from '@lickle/bin'
 
-const MyDataSchema = c.struct({
-  // Basic types
+// 1️⃣ Define your schema
+const UserSchema = c.struct({
   id: c.uint32(),
-  isActive: c.bool(),
-  name: c.utf8({ fixed: 20 }), // Fixed-size string
-  description: c.optional(c.utf8()), // Optional dynamic string
-
-  // Collections
-  tags: c.array(c.utf8()), // Array of dynamic strings
-  coordinates: c.tuple(c.float32(), c.float32()), // Fixed-size tuple
-
-  // Advanced unions
-  dataType: c.union({
-    // Tagged union
-    stringData: c.utf8(),
-    numberData: c.float64(),
-  }),
-  message: c.discriminatedUnion('type', [
-    // Discriminated union
-    c.struct({ type: c.literal('text'), content: c.utf8() }),
-    c.struct({ type: c.literal('image'), url: c.utf8(), size: c.uint32() }),
-  ]),
+  active: c.bool(),
+  name: c.utf8({ fixed: 20 }), // fixed-size string
+  bio: c.optional(c.utf8()), // optional string
+  scores: c.array(c.float32()), // array of numbers
 })
 
-// Infer the typescript type for the decoded value
-type MyDataSchema = c.TypeOf<typeof MyDataSchema>['decode']
+// 2️⃣ Encode JS object -> Uint8Array
+const encoded = c.encode(UserSchema, {
+  id: 42,
+  active: true,
+  name: 'Alice',
+  bio: 'Loves cats',
+  scores: [9.5, 8.75],
+})
+
+// 3️⃣ Decode Uint8Array -> JS object
+const decoded = c.decode(UserSchema, encoded)
+console.log(decoded)
 ```
 
-### Encoding and Decoding
+---
 
-```typescript
-import { encode, decode } from '@lickle/bin'
+## 🛠 Built-in Codecs
 
-const exampleData = {
-  id: 12345,
-  isActive: true,
-  name: 'Example Item',
-  description: 'This is an optional description.',
-  tags: ['tag1', 'tag2', 'tag3'],
-  coordinates: [10.5, 20.125],
-  dataType: ['stringData', 'Hello World'],
-  message: { type: 'text', content: 'Simple text message' },
-}
+| Type         | Example Usage                                     | Notes                       |
+| ------------ | ------------------------------------------------- | --------------------------- |
+| **Numbers**  | `c.uint8()`, `c.int16()`, `c.float64()`           | Big/little endian supported |
+| **Strings**  | `c.utf8()`, `c.utf8({ fixed: 32 })`               | Dynamic or fixed length     |
+| **Booleans** | `c.bool()`                                        | Stored as `0`/`1` byte      |
+| **Arrays**   | `c.array(c.uint16())`                             | Length-prefixed             |
+| **Tuples**   | `c.tuple(c.uint8(), c.float32())`                 | Fixed element count/types   |
+| **Optional** | `c.optional(c.utf8())`                            | 1-byte flag + value         |
+| **Literal**  | `c.literal('ok')`                                 | Stored as zero bytes        |
+| **Bytes**    | `c.bytes({ fixed: 16 })`                          | Raw binary data             |
+| **JSON**     | `c.json<MyType>()`                                | UTF-8 JSON string           |
+| **Structs**  | `c.struct({ ... })`                               | Named fields                |
+| **Unions**   | `c.taggedUnion(...)`, `c.discriminatedUnion(...)` | Variant types               |
 
-// Encode to Uint8Array
-const encodedBytes = encode(MyDataSchema, exampleData)
-console.log('Encoded Bytes:', encodedBytes)
+---
 
-// Decode back to JavaScript object
-const decodedObject = decode(MyDataSchema, encodedBytes)
-console.log('Decoded Object:', decodedObject)
+## 📚 Example: Complex Schema
+
+```ts
+const MessageSchema = c.struct({
+  type: c.literal('message'),
+  senderId: c.uint32(),
+  content: c.utf8(),
+  metadata: c.optional(c.json<Record<string, any>>()),
+})
+
+const ChatSchema = c.struct({
+  id: c.uint32(),
+  messages: c.array(MessageSchema, { maxLength: 100 }),
+})
 ```
 
-## Low-Level Utilities
+---
 
-Directly interact with binary buffers using `reader`, `read`, and `write` for fine-grained control:
+## ⚡ Low-Level API
 
-```typescript
-import { read, write, reader, writer, Uint8, Utf8, Bytes } from '@lickle/bin'
+You can also manually read/write without defining a schema:
 
-// Example for reading
-const data: Uint8Array = new Uint8Array([
-  1, 0x0b, 0x00, 0x00, 0x00, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64, 0x01, 0x02, 0x03,
-])
+```ts
+import { reader, read, writer, write, Uint8, Utf8 } from '@lickle/bin'
 
-// Read a Uint8 and a Utf8 string
-const [remainingReader1, myNumber, myString] = read(reader(data), Uint8, Utf8)
-console.log(myNumber, myString) // Output: 1 "Hello World"
+// Writing
+const w = writer()
+write(w, Uint8, 42)
+write(w, Utf8, 'Hello')
+const buf = w.flush()
 
-// Read a byte array from the remaining buffer
-const [remainingReader2, myBytes] = read(remainingReader1, Bytes)
-console.log(myBytes) // Output: Uint8Array [ 1, 2, 3 ]
-
-// Example for writing
-const myWriter = writer()
-write(myWriter, Uint8, 5)
-write(myWriter, Utf8, 'Hello')
-const encodedData = myWriter.flush()
-console.log(encodedData) // Output: Uint8Array [5, 5, 0, 0, 0, 72, 101, 108, 108, 111]
+// Reading
+const [r1, num, text] = read(reader(buf), Uint8, Utf8)
+console.log(num, text) // 42 "Hello"
 ```
 
-## License
+---
 
-This project is licensed under the MIT License.
+## 📄 License
 
 MIT © [Dan Beaven](https://github.com/Pingid)
