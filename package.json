@@ -40,11 +40,14 @@
     "esm": "tsc -p ./tsconfig.esm.json",
     "cjs": "tsc -p ./tsconfig.cjs.json",
     "typecheck": "tsc --noEmit",
+    "bench": "BENCH_FORMAT=json tsx bench.ts",
     "test": "vitest"
   },
   "devDependencies": {
+    "@mitata/counters": "^0.0.8",
     "esbuild": "^0.25.5",
     "jsr": "^0.13.4",
+    "mitata": "^1.0.34",
     "prettier": "^3.3.3",
     "typescript": "^5.6.3",
     "vitest": "^3.0.5"
