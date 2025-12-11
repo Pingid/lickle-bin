@@ -23,7 +23,7 @@ export const test = b.struct({
   nullable2: b.nullable(b.utf8()),
 
   array: b.array(b.utf8()),
-  tuple: b.tuple(b.uint8<1>(), b.uint16<2>(), b.uint32<3>()),
+  tuple: b.tuple(b.uint8(), b.uint16(), b.uint32()),
   struct: b.struct({ a: b.utf8(), b: b.utf8(), optional: b.optional(b.utf8()) }),
   partial: b.partial(b.struct({ a: b.utf8(), b: b.utf8(), optional: b.optional(b.utf8()) })),
 
@@ -94,7 +94,7 @@ export type EncodeTypeInferTests = [
   Assert<Equal<b.Infer<typeof test.schema.nullable1>['encode'], string | null>>,
   Assert<Equal<b.Infer<typeof test.schema.nullable2>['encode'], string | null>>,
   Assert<Equal<b.Infer<typeof test.schema.array>['encode'], string[]>>,
-  Assert<Equal<b.Infer<typeof test.schema.tuple>['encode'], [1, 2, 3]>>,
+  Assert<Equal<b.Infer<typeof test.schema.tuple>['encode'], [number, number, number]>>,
   Assert<Equal<b.Infer<typeof test.schema.struct>['encode'], { a: string; b: string; optional?: string }>>,
   Assert<Equal<b.Infer<typeof test.schema.partial>['encode'], { a?: string; b?: string; optional?: string }>>,
   Assert<
@@ -128,7 +128,7 @@ export type DecodeTypeInferTests = [
   Assert<Equal<b.Infer<typeof test.schema.nullable1>['decode'], string | null>>,
   Assert<Equal<b.Infer<typeof test.schema.nullable2>['decode'], string | null>>,
   Assert<Equal<b.Infer<typeof test.schema.array>['decode'], string[]>>,
-  Assert<Equal<b.Infer<typeof test.schema.tuple>['decode'], [1, 2, 3]>>,
+  Assert<Equal<b.Infer<typeof test.schema.tuple>['decode'], [number, number, number]>>,
   Assert<Equal<b.Infer<typeof test.schema.struct>['decode'], { a: string; b: string; optional?: string }>>,
   Assert<Equal<b.Infer<typeof test.schema.partial>['decode'], { a?: string; b?: string; optional?: string }>>,
   Assert<

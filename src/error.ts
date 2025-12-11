@@ -29,12 +29,13 @@ export const fail = (code: ErrorCode, msg: string, offset?: number): never => {
 }
 
 /** Wraps a codec execution to add context if it fails. */
+const DEBUG = process.env['NODE_ENV'] !== 'production'
 export const withContext = <T>(context: string, fn: () => T): T => {
+  if (!DEBUG) return fn()
   try {
     return fn()
   } catch (e) {
     if (e instanceof BinError) {
-      // Append context: "User" -> "User[5]" -> "User[5].name"
       e.context = e.context ? `${context}.${e.context}` : context
       e.message = `[${e.code}] ${e.message.split(' (in')[0]} (in ${e.context})`
     }

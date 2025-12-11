@@ -17,54 +17,80 @@ type Endian = 'le' | 'be'
 
 /** Generic factory for fixed-size endian-aware number codecs (number) */
 const numCodec =
-  <N extends number>(
-    bytes: N,
-    getter: (view: DataView, offset: number, littleEndian: boolean) => number,
-    setter: (view: DataView, offset: number, value: number, littleEndian: boolean) => void,
-  ): FixedCodecGetter<N, number> =>
-  (endian: Endian = 'be'): FixedSize<N, number> => ({
-    s: bytes,
-    e: (w, v) => w.write(bytes, (view, offset) => setter(view, offset, v, endian === 'le')),
-    d: (r) => r.read(bytes, (view, offset) => getter(view, offset, endian === 'le')),
-  })
-
-type FixedCodecGetter<N extends number, V> = {
-  /** Defaults to 'be' Big Endian */
-  (endian?: Endian): FixedSize<N, V>
-  <const O extends V = V>(endian?: Endian): FixedSize<N, O>
-}
+  <S extends number>(
+    bytes: S,
+    getter: (v: DataView, o: number, le: boolean) => number,
+    setter: (v: DataView, o: number, x: number, le: boolean) => void,
+  ) =>
+  (endian: Endian = 'be'): FixedSize<S, number> => {
+    const le = endian === 'le'
+    return {
+      s: bytes,
+      e: (w, v) => {
+        setter(w.view, w.pos, v, le)
+        w.pos += bytes
+      },
+      d: (r) => {
+        const v = getter(r.view, r.pos, le)
+        r.pos += bytes
+        return v
+      },
+    }
+  }
 
 /** Generic factory for fixed-size endian-aware bigint codecs (bigint) */
 const bigNumCodec =
   <N extends number>(
     bytes: N,
-    getter: (view: DataView, offset: number, littleEndian: boolean) => bigint,
-    setter: (view: DataView, offset: number, value: bigint, littleEndian: boolean) => void,
-  ): FixedCodecGetter<N, bigint> =>
-  (endian?: Endian): FixedSize<N, bigint> => ({
-    s: bytes,
-    e: (w, v) => w.write(bytes, (view, offset) => setter(view, offset, v, endian === 'le')),
-    d: (r) => r.read(bytes, (view, offset) => getter(view, offset, endian === 'le')),
-  })
+    getter: (v: DataView, o: number, le: boolean) => bigint,
+    setter: (v: DataView, o: number, x: bigint, le: boolean) => void,
+  ) =>
+  (endian: Endian = 'be'): FixedSize<N, bigint> => {
+    const le = endian === 'le'
+    return {
+      s: bytes,
+      e: (w, v) => {
+        setter(w.view, w.pos, v, le)
+        w.pos += bytes
+      },
+      d: (r) => {
+        const v = getter(r.view, r.pos, le)
+        r.pos += bytes
+        return v
+      },
+    }
+  }
 
 /** Creates a codec for an 8-bit unsigned integer. */
-export const uint8: FixedCodecGetter<1, number> = () =>
-  numCodec(
-    1,
-    (v, o) => v.getUint8(o),
-    (v, o, x) => v.setUint8(o, x),
-  )()
+export const uint8 = (): FixedSize<1, number> => ({
+  s: 1,
+  e: (w, v) => {
+    w.view.setUint8(w.pos, v)
+    w.pos++
+  },
+  d: (r) => {
+    const v = r.view.getUint8(r.pos)
+    r.pos++
+    return v
+  },
+})
 
 /** Codec for a fixed-size 8-bit unsigned integer. */
 export const Uint8: FixedSize<1, number> = uint8()
 
 /** Creates a codec for an 8-bit signed integer. */
-export const int8: FixedCodecGetter<1, number> = () =>
-  numCodec(
-    1,
-    (v, o) => v.getInt8(o),
-    (v, o, x) => v.setInt8(o, x),
-  )()
+export const int8 = (): FixedSize<1, number> => ({
+  s: 1,
+  e: (w, v) => {
+    w.view.setInt8(w.pos, v)
+    w.pos++
+  },
+  d: (r) => {
+    const v = r.view.getInt8(r.pos)
+    r.pos++
+    return v
+  },
+})
 
 /** Codec for a fixed-size 8-bit signed integer. */
 export const Int8: FixedSize<1, number> = int8()
@@ -158,18 +184,34 @@ export const Bool: FixedSize<1, boolean> = {
 /** Creates a codec for a boolean value. */
 export const bool = (): FixedSize<1, boolean> => Bool
 
+// --- Optimized String Helpers ---
 const ENC = new TextEncoder()
 const DEC = new TextDecoder('utf-8', { fatal: true })
 
+// Detect Node.js environment for faster string sizing
+const isNode = typeof Buffer !== 'undefined'
+const strByteLen = isNode ? (s: string) => Buffer.byteLength(s) : (s: string) => ENC.encode(s).length
+
 /** Codec for a dynamic-sized UTF-8 encoded string with max length of 2^32-1. */
 export const Utf8: DynamicSize<string> = {
-  s: (v) => ENC.encode(v).length + Uint32.s,
+  s: (v) => Uint32.s + strByteLen(v),
   e: (w, v) => {
-    const enc = ENC.encode(v)
-    Uint32.e(w, enc.length)
-    w.write(enc.length, (view, offset) => new Uint8Array(view.buffer, view.byteOffset + offset, enc.length).set(enc))
+    // 1. Write Length Placeholder
+    const lenPos = w.pos
+    w.pos += 4
+
+    // 2. Write String directly to buffer (EncodeInto is zero-alloc)
+    const { written } = ENC.encodeInto(v, w.buf.subarray(w.pos))
+
+    // 3. Go back and write exact length
+    w.view.setUint32(lenPos, written!, false) // BE
+    w.pos += written!
   },
-  d: (r) => DEC.decode(r.readBytes(Uint32.d(r))),
+  d: (r) => {
+    const len = r.view.getUint32(r.pos, false) // BE
+    r.pos += 4
+    return DEC.decode(r.readBytes(len))
+  },
 }
 
 /** Creates a codec for a dynamic-sized UTF-8 encoded string with max length of 2^32-1. */
@@ -184,13 +226,12 @@ export const utf8: {
     const size = p.fixed
     const codec: FixedSize<number, string> = {
       s: size,
-      e: (w, v) =>
-        w.write(size, (view, offset) => {
-          const enc = ENC.encode(v)
-          // Optimization: slice if too long to prevent overflow
-          const data = enc.length <= size ? enc : enc.subarray(0, size)
-          new Uint8Array(view.buffer, view.byteOffset + offset, size).set(data)
-        }),
+      e: (w, v) => {
+        const { written } = ENC.encodeInto(v, w.buf.subarray(w.pos, w.pos + size))
+        // Fill remaining with 0 if string is shorter than fixed size
+        if (written! < size) w.buf.fill(0, w.pos + written!, w.pos + size)
+        w.pos += size
+      },
       d: (r) => DEC.decode(r.readBytes(size)).replace(/\0+$/, ''),
     }
     return codec as any
@@ -205,14 +246,7 @@ export const utf8: {
       }
       return Uint32.s + len
     },
-    e: (w, v) => {
-      const enc = ENC.encode(v)
-      if (p?.maxBytes != null && enc.length > p.maxBytes) {
-        return fail(ErrorCode.SIZE_LIMIT, `String length ${enc.length} exceeds limit ${p.maxBytes}`)
-      }
-      Uint32.e(w, enc.length)
-      w.write(enc.length, (view, offset) => new Uint8Array(view.buffer, view.byteOffset + offset, enc.length).set(enc))
-    },
+    e: (w, v) => Utf8.e(w, v),
     d: (r) => {
       const n = Uint32.d(r)
       if (p?.maxBytes != null && n > p.maxBytes) {
@@ -231,19 +265,25 @@ export const utf8: {
 
 /** Creates a codec for a dynamic-sized JSON encoded string. */
 export const json = <T>(): DynamicSize<T, T> => ({
-  s: (v) => ENC.encode(JSON.stringify(v)).length + Uint32.s,
+  s: (v) => Uint32.s + strByteLen(JSON.stringify(v)),
   e: (w, v) => Utf8.e(w, JSON.stringify(v)),
   d: (r) => JSON.parse(Utf8.d(r)) as T,
 })
 
 /** Codec for a dynamic or fixed-size byte array. */
 export const Bytes: DynamicSize<Uint8Array> = {
-  s: (v) => v.length + Uint32.s,
+  s: (v) => v.length + 4,
   e: (w, v) => {
-    Uint32.e(w, v.length)
-    w.write(v.length, (view, offset) => new Uint8Array(view.buffer, view.byteOffset + offset, v.length).set(v))
+    w.view.setUint32(w.pos, v.length, false)
+    w.pos += 4
+    w.buf.set(v, w.pos)
+    w.pos += v.length
   },
-  d: (r) => r.readBytes(Uint32.d(r)),
+  d: (r) => {
+    const len = r.view.getUint32(r.pos, false)
+    r.pos += 4
+    return r.readBytes(len)
+  },
 }
 
 /** Creates a codec for a dynamic or fixed-size byte array. */
@@ -251,39 +291,19 @@ export const bytes: {
   (p?: { max: number }): DynamicSize<Uint8Array>
   <const N extends number = number>(p: { fixed: N }): FixedSize<N, Uint8Array>
 } = (p?: { fixed?: number; max?: number }) => {
-  // 1. Fixed Size Path
   if (typeof p?.fixed === 'number') {
     const size = p.fixed
     const codec: FixedSize<number, Uint8Array> = {
       s: size,
-      e: (w, v) => w.write(size, (view, offset) => new Uint8Array(view.buffer, view.byteOffset + offset, size).set(v)),
+      e: (w, v) => {
+        w.buf.set(v.subarray(0, size), w.pos)
+        w.pos += size
+      },
       d: (r) => r.readBytes(size),
     }
     return codec as any
   }
-  const max = p?.max
-  if (typeof max !== 'number') return Bytes
-  const codec: DynamicSize<Uint8Array> = {
-    s: (v) => {
-      if (v.length > max) return fail(ErrorCode.SIZE_LIMIT, `Bytes length ${v.length} exceeds limit ${max}`)
-      return Uint32.s + v.length
-    },
-
-    e: (w, v) => {
-      if (v.length > max) return fail(ErrorCode.SIZE_LIMIT, `Bytes length ${v.length} exceeds limit ${max}`)
-      Uint32.e(w, v.length)
-      w.write(v.length, (view, offset) => {
-        new Uint8Array(view.buffer, view.byteOffset + offset, v.length).set(v)
-      })
-    },
-
-    d: (r) => {
-      const n = Uint32.d(r)
-      if (n > max!) return fail(ErrorCode.SIZE_LIMIT, `Encoded bytes length ${n} exceeds limit ${max}`)
-      return r.readBytes(n)
-    },
-  }
-  return codec
+  return Bytes
 }
 
 /** Creates a zero-sized codec for a literal value that is not stored in the buffer. */
@@ -297,13 +317,22 @@ export const literal = <const O>(value: O): Literal<O> => ({
 /** Wraps a codec to make its value optional, prefixed by a byte indicating presence. */
 export const optional = <D, E = D>(inner: BinCode<D, E>): Optional<D, E> => ({
   optional: true,
+  s: (v) => 1 + (typeof v === 'undefined' ? 0 : size(inner, v)),
   e: (w, v) => {
-    if (typeof v === 'undefined') return Uint8.e(w, 0)
-    Uint8.e(w, 1)
-    return inner.e(w, v)
+    if (typeof v === 'undefined') {
+      w.view.setUint8(w.pos, 0)
+      w.pos++
+    } else {
+      w.view.setUint8(w.pos, 1)
+      w.pos++
+      inner.e(w, v)
+    }
   },
-  d: (r) => (Uint8.d(r) === 0 ? undefined : inner.d(r)),
-  s: (v) => Uint8.s + (typeof v === 'undefined' ? 0 : size(inner, v)),
+  d: (r) => {
+    const exists = r.view.getUint8(r.pos) === 1
+    r.pos++
+    return exists ? inner.d(r) : undefined
+  },
 })
 
 /** Wraps a codec to make its value nullable, prefixed by a byte indicating presence. */

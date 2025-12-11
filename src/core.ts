@@ -7,27 +7,13 @@ import { BinError } from './error.js'
 export type Cursor = { buf: Uint8Array; view: DataView; pos: number }
 
 /** Writes bytes to a buffer. */
-export type Writer = {
-  /**
-   * @param size - Number of bytes to write
-   * @param fn - Callback receiving the buffer, the DataView, and the current offset
-   */
-  write: (size: number, fn: (view: DataView, offset: number) => void) => void
-}
+export type Writer = Cursor
 
 /** Reads bytes from a buffer. */
-export type Reader = {
-  /**
-   * @param size - Number of bytes to read
-   * @param fn - Callback receiving the DataView, the current offset, and the new offset
-   */
-  read: <R>(size: number, fn: (view: DataView, offset: number) => R) => R
-  /** Reads raw bytes directly (zero-copy subarray). Useful for strings/buffers where DataView isn't needed. */
+export type Reader = Cursor & {
+  /** reads bytes and advances pos */
   readBytes: (size: number) => Uint8Array
-  /**
-   * Validates that allocating 'count' items is safe by checking against global limits and remaining buffer size.
-   * @throws BinError if count is malicious or too large.
-   */
+  /** checks if the list length is safe */
   checkList: (count: number) => void
 }
 

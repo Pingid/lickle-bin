@@ -1,7 +1,7 @@
 import { Writer, Reader, BinCode, Decoder, Encoder, Infer, Result, DynamicSize, size } from './core.js'
 import { reader, checkedReader, writer } from './io.js'
-import { Uint32, Uint16 } from './codecs.js'
 import { BinError, ErrorCode } from './error.js'
+import { Uint32, Uint16 } from './codecs.js'
 
 export * from './codecs.js'
 export * from './core.js'
@@ -15,9 +15,11 @@ export const write = <E, W extends Writer>(writer: W, codec: Encoder<E>, value: 
 
 /** Encodes a value into a Uint8Array using the provided codec. */
 export const encode = <T>(bincode: BinCode<T>, value: T): Uint8Array => {
-  const encoder = writer(typeof bincode.s === 'number' ? bincode.s : undefined)
-  bincode.e(encoder, value)
-  return encoder.flush()
+  const len = size(bincode, value)
+  const buf = new Uint8Array(len)
+  const w = writer(buf)
+  bincode.e(w, value)
+  return buf
 }
 
 /** Decodes a value from a Uint8Array using the provided codec. */
@@ -53,48 +55,38 @@ export const envelope = <T>(inner: DynamicSize<T>) => {
   return {
     s: (v: T) => Uint32.s + Uint16.s + Uint32.s + size(inner, v),
     e: (w: Writer, v: T) => {
+      // 1. Write Header & Version
       Uint32.e(w, HEADER)
       Uint16.e(w, VERSION)
-      const payload = encode(inner, v)
-      Uint32.e(w, payload.length)
-      w.write(payload.length, (view, offset) =>
-        new Uint8Array(view.buffer, view.byteOffset + offset, payload.length).set(payload),
-      )
+
+      // 2. Reserve 4 bytes for the length prefix
+      const lenPos = w.pos
+      w.pos += 4
+
+      // 3. Write payload and track position
+      const startPos = w.pos
+      inner.e(w, v)
+      const endPos = w.pos
+
+      // 4. Calculate actual length (End - Start)
+      const length = endPos - startPos
+
+      // 5. Backtrack: Write length at the reserved position
+      // Using 'false' for Big Endian to match Uint32 codec defaults
+      w.view.setUint32(lenPos, length, false)
     },
     d: (r: Reader) => {
       if (Uint32.d(r) !== HEADER) throw new Error('Missing header')
       const ver = Uint16.d(r)
       if (ver !== 1) throw new Error(`unsupported version ${ver}`)
+
       const len = Uint32.d(r)
+
+      // Read exact bytes for safety (framing)
       const payload = r.readBytes(len)
+
+      // Decode the isolated payload
       return inner.d(reader(payload))
     },
   } satisfies DynamicSize<T>
 }
-
-// Your envelope function serializes the payload twice to calculate the length prefix.
-
-// TypeScript
-
-// // Current
-// e: (w: Writer, v: T) => {
-//   // ... writes header ...
-//   const payload = encode(inner, v) // 1. Allocates a new generic writer + buffer
-//   Uint32.e(w, payload.length)
-//   w.write(payload.length, (b, o) => b.set(payload, o)) // 2. Copies that buffer into the main writer
-// },
-// This is inefficient for large payloads.
-
-// The Fix:
-
-// Reserve 4 bytes in the writer.
-
-// Remember the position.
-
-// Write the payload.
-
-// Calculate length (currentPos - startPos).
-
-// Go back and write the length at the reserved spot.
-
-// Note: This requires your Writer to support random access/seeking, which your chunked-list writer currently does not easily support. You might need to change Writer to use a single pre-allocated buffer (growing if needed) to allow seeking.

@@ -22,20 +22,15 @@ const checkList = (count: number, buf: Uint8Array, pos: number) => {
 /** Creates a reader. */
 export const reader = (buf: Uint8Array, offset: number = 0): Reader & Cursor => ({
   buf,
-  view: new DataView(buf.buffer, buf.byteOffset, buf.byteLength), // <--- Allocated ONCE
+  view: new DataView(buf.buffer, buf.byteOffset, buf.byteLength),
   pos: offset,
-  read<T>(size: number, fn: (view: DataView, offset: number) => T) {
-    const t = fn(this.view, this.pos) // Pass the shared view
-    this.pos += size
-    return t
-  },
   readBytes(size: number) {
     const start = this.pos
     this.pos += size
     return this.buf.subarray(start, this.pos)
   },
   checkList(count: number) {
-    return checkList(count, this.buf, this.pos)
+    checkList(count, this.buf, this.pos)
   },
 })
 
@@ -45,6 +40,7 @@ export const reader = (buf: Uint8Array, offset: number = 0): Reader & Cursor => 
 export const checkedReader = (buf: Uint8Array, offset: number = 0): Reader & Cursor => {
   let pos = offset
   const len = buf.byteLength
+  const view = new DataView(buf.buffer, buf.byteOffset, len)
 
   const ensure = (n: number) => {
     if (pos + n > len) {
@@ -54,18 +50,12 @@ export const checkedReader = (buf: Uint8Array, offset: number = 0): Reader & Cur
 
   return {
     buf,
+    view,
     get pos() {
       return pos
     },
     set pos(n: number) {
       pos = n
-    },
-    view: new DataView(buf.buffer, buf.byteOffset, buf.byteLength),
-    read<T>(size: number, fn: (view: DataView, offset: number) => T) {
-      ensure(size)
-      const start = pos
-      pos += size
-      return fn(this.view, start)
     },
     readBytes(size: number) {
       ensure(size)
@@ -74,7 +64,7 @@ export const checkedReader = (buf: Uint8Array, offset: number = 0): Reader & Cur
       return this.buf.subarray(start, pos)
     },
     checkList(count: number) {
-      return checkList(count, this.buf, this.pos)
+      checkList(count, this.buf, this.pos)
     },
   }
 }
@@ -83,46 +73,11 @@ export const checkedReader = (buf: Uint8Array, offset: number = 0): Reader & Cur
  * Creates a writer for assembling binary data.
  * @param size - If provided, allocates a fixed Uint8Array (Fastest). If undefined, uses a dynamic list of chunks (Slower, but flexible).
  */
-export const writer = (size?: number): Writer & { flush: () => Uint8Array } => {
-  // Fast Path: Fixed Size
-  if (typeof size === 'number') {
-    const buf = new Uint8Array(size)
-    const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength) // <--- Allocated ONCE
-    let pos = 0
-    return {
-      write: (bytes, fn) => {
-        fn(view, pos) // Pass the shared view
-        pos += bytes
-      },
-      flush: () => buf,
-    }
-  }
-
-  // Slow Path: Dynamic Size (Chunks)
-  // We cannot share a single DataView easily across chunks, so we create them on demand.
-  // Ideally, users should use fixed size writers for heavy number processing.
-  const bufs: Uint8Array[] = []
-  let totalLen = 0
-  return {
-    write(bytes, fn) {
-      const chunk = new Uint8Array(bytes)
-      const chunkView = new DataView(chunk.buffer)
-      fn(chunkView, 0)
-      bufs.push(chunk)
-      totalLen += bytes
-    },
-    flush() {
-      if (bufs.length === 1) return bufs[0]!
-      const out = new Uint8Array(totalLen)
-      let offset = 0
-      for (const buf of bufs) {
-        out.set(buf, offset)
-        offset += buf.length
-      }
-      return out
-    },
-  }
-}
+export const writer = (buf: Uint8Array): Writer => ({
+  buf,
+  view: new DataView(buf.buffer, buf.byteOffset, buf.byteLength),
+  pos: 0,
+})
 
 /**
  * Efficiently creates a DataView.
