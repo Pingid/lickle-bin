@@ -11,9 +11,9 @@ import {
   Compute,
   size,
 } from './core.js'
+import { ErrorCode, fail, withContext } from './error.js'
 
 type Endian = 'le' | 'be'
-const dv = (b: Uint8Array) => new DataView(b.buffer, b.byteOffset, b.byteLength)
 
 /** Generic factory for fixed-size endian-aware number codecs (number) */
 const numCodec =
@@ -24,8 +24,8 @@ const numCodec =
   ): FixedCodecGetter<N, number> =>
   (endian: Endian = 'be'): FixedSize<N, number> => ({
     s: bytes,
-    e: (w, v) => w.write(bytes, (b, o) => setter(dv(b), o, v, endian === 'le')),
-    d: (r) => r.read(bytes, (b, o) => getter(dv(b), o, endian === 'le')),
+    e: (w, v) => w.write(bytes, (view, offset) => setter(view, offset, v, endian === 'le')),
+    d: (r) => r.read(bytes, (view, offset) => getter(view, offset, endian === 'le')),
   })
 
 type FixedCodecGetter<N extends number, V> = {
@@ -43,8 +43,8 @@ const bigNumCodec =
   ): FixedCodecGetter<N, bigint> =>
   (endian?: Endian): FixedSize<N, bigint> => ({
     s: bytes,
-    e: (w, v) => w.write(bytes, (b, o) => setter(dv(b), o, v, endian === 'le')),
-    d: (r) => r.read(bytes, (b, o) => getter(dv(b), o, endian === 'le')),
+    e: (w, v) => w.write(bytes, (view, offset) => setter(view, offset, v, endian === 'le')),
+    d: (r) => r.read(bytes, (view, offset) => getter(view, offset, endian === 'le')),
   })
 
 /** Creates a codec for an 8-bit unsigned integer. */
@@ -167,9 +167,9 @@ export const Utf8: DynamicSize<string> = {
   e: (w, v) => {
     const enc = ENC.encode(v)
     Uint32.e(w, enc.length)
-    w.write(enc.length, (b, o) => b.set(enc, o))
+    w.write(enc.length, (view, offset) => new Uint8Array(view.buffer, view.byteOffset + offset, enc.length).set(enc))
   },
-  d: (r) => r.read(Uint32.d(r), (b, o, e) => DEC.decode(b.slice(o, e))),
+  d: (r) => DEC.decode(r.readBytes(Uint32.d(r))),
 }
 
 /** Creates a codec for a dynamic-sized UTF-8 encoded string with max length of 2^32-1. */
@@ -179,30 +179,51 @@ export const utf8: {
   <const N extends number = number>(p: { fixed: N }): FixedSize<N, string>
   <const O extends string = string, N extends number = number>(p: { fixed: N }): FixedSize<N, O>
 } = (p?: { fixed?: number; maxBytes?: number }) => {
+  // 1. Fixed Size Path
   if (typeof p?.fixed === 'number') {
-    const tp: FixedSize<number, string> = {
-      s: p.fixed,
-      e: (w, v) => w.write(p.fixed!, (b, o) => b.set(ENC.encode(v), o)),
-      d: (r) => r.read(p.fixed!, (b, o) => DEC.decode(b.slice(o, o + p.fixed!)).replace(/\0+$/, '')),
+    const size = p.fixed
+    const codec: FixedSize<number, string> = {
+      s: size,
+      e: (w, v) =>
+        w.write(size, (view, offset) => {
+          const enc = ENC.encode(v)
+          // Optimization: slice if too long to prevent overflow
+          const data = enc.length <= size ? enc : enc.subarray(0, size)
+          new Uint8Array(view.buffer, view.byteOffset + offset, size).set(data)
+        }),
+      d: (r) => DEC.decode(r.readBytes(size)).replace(/\0+$/, ''),
     }
-    return tp as any
+    return codec as any
   }
+
+  // 2. Dynamic Size Path
   const codec: DynamicSize<string> = {
     s: (v) => {
-      const enc = ENC.encode(v)
-      if (p?.maxBytes != null && enc.length > p.maxBytes) throw new Error(`utf8 too long: ${enc.length}`)
-      return Uint32.s + enc.length
+      const len = ENC.encode(v).length
+      if (p?.maxBytes != null && len > p.maxBytes) {
+        return fail(ErrorCode.SIZE_LIMIT, `String length ${len} exceeds limit ${p.maxBytes}`)
+      }
+      return Uint32.s + len
     },
     e: (w, v) => {
       const enc = ENC.encode(v)
-      if (p?.maxBytes != null && enc.length > p.maxBytes) throw new Error(`utf8 too long: ${enc.length}`)
+      if (p?.maxBytes != null && enc.length > p.maxBytes) {
+        return fail(ErrorCode.SIZE_LIMIT, `String length ${enc.length} exceeds limit ${p.maxBytes}`)
+      }
       Uint32.e(w, enc.length)
-      w.write(enc.length, (b, o) => b.set(enc, o))
+      w.write(enc.length, (view, offset) => new Uint8Array(view.buffer, view.byteOffset + offset, enc.length).set(enc))
     },
     d: (r) => {
       const n = Uint32.d(r)
-      if (p?.maxBytes != null && n > p.maxBytes) throw new Error(`utf8 length ${n} > max ${p.maxBytes}`)
-      return r.read(n, (b, o, e) => new TextDecoder('utf-8', { fatal: true }).decode(b.slice(o, e)))
+      if (p?.maxBytes != null && n > p.maxBytes) {
+        return fail(ErrorCode.SIZE_LIMIT, `Encoded string length ${n} exceeds limit ${p.maxBytes}`)
+      }
+      const bytes = r.readBytes(n)
+      try {
+        return DEC.decode(bytes)
+      } catch {
+        return fail(ErrorCode.INVALID_UTF8, 'Invalid UTF-8 sequence')
+      }
     },
   }
   return codec
@@ -218,8 +239,11 @@ export const json = <T>(): DynamicSize<T, T> => ({
 /** Codec for a dynamic or fixed-size byte array. */
 export const Bytes: DynamicSize<Uint8Array> = {
   s: (v) => v.length + Uint32.s,
-  e: (w, v) => (Uint32.e(w, v.length), w.write(v.length, (b, o) => b.set(v, o))),
-  d: (r) => r.read(Uint32.d(r), (b, o, e) => b.slice(o, e)),
+  e: (w, v) => {
+    Uint32.e(w, v.length)
+    w.write(v.length, (view, offset) => new Uint8Array(view.buffer, view.byteOffset + offset, v.length).set(v))
+  },
+  d: (r) => r.readBytes(Uint32.d(r)),
 }
 
 /** Creates a codec for a dynamic or fixed-size byte array. */
@@ -227,30 +251,36 @@ export const bytes: {
   (p?: { max: number }): DynamicSize<Uint8Array>
   <const N extends number = number>(p: { fixed: N }): FixedSize<N, Uint8Array>
 } = (p?: { fixed?: number; max?: number }) => {
+  // 1. Fixed Size Path
   if (typeof p?.fixed === 'number') {
-    const tp: FixedSize<number, Uint8Array> = {
-      s: p.fixed!,
-      e: (w, v) => w.write(p.fixed!, (b, o) => b.set(v, o)),
-      d: (r) => r.read(p.fixed!, (b, o, e) => b.slice(o, e)),
+    const size = p.fixed
+    const codec: FixedSize<number, Uint8Array> = {
+      s: size,
+      e: (w, v) => w.write(size, (view, offset) => new Uint8Array(view.buffer, view.byteOffset + offset, size).set(v)),
+      d: (r) => r.readBytes(size),
     }
-    return tp as any
+    return codec as any
   }
   const max = p?.max
   if (typeof max !== 'number') return Bytes
   const codec: DynamicSize<Uint8Array> = {
     s: (v) => {
-      if (v.length > max) throw new Error(`bytes too long`)
+      if (v.length > max) return fail(ErrorCode.SIZE_LIMIT, `Bytes length ${v.length} exceeds limit ${max}`)
       return Uint32.s + v.length
     },
+
     e: (w, v) => {
-      if (v.length > max) throw new Error(`bytes too long`)
+      if (v.length > max) return fail(ErrorCode.SIZE_LIMIT, `Bytes length ${v.length} exceeds limit ${max}`)
       Uint32.e(w, v.length)
-      w.write(v.length, (b, o) => b.set(v, o))
+      w.write(v.length, (view, offset) => {
+        new Uint8Array(view.buffer, view.byteOffset + offset, v.length).set(v)
+      })
     },
+
     d: (r) => {
       const n = Uint32.d(r)
-      if (n > max!) throw new Error(`bytes length ${n} > max ${max!}`)
-      return r.read(n, (b, o, e) => b.slice(o, e))
+      if (n > max!) return fail(ErrorCode.SIZE_LIMIT, `Encoded bytes length ${n} exceeds limit ${max}`)
+      return r.readBytes(n)
     },
   }
   return codec
@@ -290,36 +320,41 @@ export const nullable = <D, E = D>(inner: BinCode<D, E>): DynamicSize<D | null, 
 /** Creates a codec for an array of items, prefixed by the array's length. */
 export const array = <D, E = D>(inner: BinCode<D, E>, options?: { maxLength?: number }): DynamicSize<D[], E[]> => {
   const max = options?.maxLength
-  if (typeof max === 'number') {
-    return {
-      s: (v) => {
-        if (v.length > max) throw new Error('array too long')
-        return Uint32.s + v.reduce((a, x) => a + size(inner, x), 0)
-      },
-      e: (w, v) => {
-        if (v.length > max) throw new Error('array too long')
-        Uint32.e(w, v.length)
-        for (const x of v) inner.e(w, x)
-      },
-      d: (r) => {
-        const n = Uint32.d(r)
-        if (n > max) throw new Error(`array len ${n} > ${max}`)
-        const out = new Array(n)
-        for (let i = 0; i < n; i++) out[i] = inner.d(r)
-        return out
-      },
-    }
-  }
   return {
-    s: (v) => Uint32.s + v.reduce((acc, item) => acc + size(inner, item), 0),
-    e: (w, v) => {
-      Uint32.e(w, v.length)
-      for (const item of v) inner.e(w, item)
+    s: (v) => {
+      if (typeof max === 'number' && v.length > max) {
+        return fail(ErrorCode.SIZE_LIMIT, `Array length ${v.length} exceeds max ${max}`)
+      }
+      return Uint32.s + v.reduce((a, x) => a + size(inner, x), 0)
     },
+
+    e: (w, v) => {
+      if (typeof max === 'number' && v.length > max) {
+        return fail(ErrorCode.SIZE_LIMIT, `Array length ${v.length} exceeds max ${max}`)
+      }
+      Uint32.e(w, v.length)
+      for (let i = 0; i < v.length; i++) {
+        withContext(`[${i}]`, () => inner.e(w, v[i]!))
+      }
+    },
+
     d: (r) => {
-      const results = new Array(Uint32.d(r))
-      for (let i = 0; i < results.length; i++) results[i] = inner.d(r)
-      return results
+      const n = Uint32.d(r)
+
+      // 1. Check Schema constraints (Specific to this field)
+      if (typeof max === 'number' && n > max) {
+        return fail(ErrorCode.SIZE_LIMIT, `Array len ${n} > max ${max}`)
+      }
+
+      // 2. Check Allocation Safety (Global protection)
+      r.checkList(n)
+
+      // 3. Safe to allocate
+      const out = new Array(n)
+      for (let i = 0; i < n; i++) {
+        out[i] = withContext(`[${i}]`, () => inner.d(r))
+      }
+      return out
     },
   }
 }
@@ -341,11 +376,11 @@ export const struct = <const T extends Record<string, BinCode<any>>>(
   schema: shape,
   s: (v) => Object.keys(shape).reduce((acc, key) => acc + size(shape[key as keyof T]!, (v as any)[key]), 0),
   e: (w, v) => {
-    for (const key in shape) shape[key as keyof T]!.e(w, (v as any)[key])
+    for (const key in shape) withContext(key, () => shape[key as keyof T]!.e(w, (v as any)[key]))
   },
   d: (r) => {
     const result: any = {}
-    for (const key in shape) result[key] = (shape as any)[key].d(r)
+    for (const key in shape) result[key] = withContext(key, () => (shape as any)[key].d(r))
     return result
   },
 })
@@ -376,11 +411,11 @@ export const tuple = <const T extends BinCode<any>[]>(
   schema: shape,
   s: (v) => v.reduce((acc, item, i) => acc + size(shape[i]!, item), 0),
   e: (w, v) => {
-    for (let i = 0; i < shape.length; i++) shape[i]!.e(w, v[i])
+    for (let i = 0; i < shape.length; i++) withContext(`[${i}]`, () => shape[i]!.e(w, v[i]))
   },
   d: (r) => {
     const result: any = []
-    for (let i = 0; i < shape.length; i++) result.push(shape[i]!.d(r))
+    for (let i = 0; i < shape.length; i++) result.push(withContext(`[${i}]`, () => shape[i]!.d(r)))
     return result
   },
 })
@@ -399,13 +434,13 @@ export function taggedUnion<const T extends Record<string, BinCode<any>>>(
     s: (v: any) => Uint8.s + size(shape[v[0] as keyof T]!, v[1]),
     e: (w: Writer, [tag, value]: [keyof T, any]) => {
       const idx = keys.indexOf(tag)
-      if (idx < 0) throw new Error(`bad tag ${String(tag)}`)
+      if (idx < 0) return fail(ErrorCode.INVALID_TAG, `bad tag ${String(tag)}`)
       Uint8.e(w, idx)
       shape[tag]!.e(w, value)
     },
     d: (r: Reader) => {
       const idx = Uint8.d(r)
-      if (idx < 0 || idx >= keys.length) throw new Error(`bad tag index ${idx}`)
+      if (idx < 0 || idx >= keys.length) return fail(ErrorCode.INVALID_TAG, `bad tag index ${idx}`)
       const key = keys[idx]!
       return [key, (shape as any)[key].d(r)]
     },

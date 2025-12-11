@@ -1,18 +1,34 @@
 // ==========================================
 // IO Interfaces
 // ==========================================
+import { BinError } from './error.js'
 
-/** A buffer with a position pointer. */
-export type Cursor = { buf: Uint8Array; pos: number }
+/** A buffer with a position pointer and shared DataView. */
+export type Cursor = { buf: Uint8Array; view: DataView; pos: number }
 
 /** Writes bytes to a buffer. */
 export type Writer = {
-  write: (size: number, fn: (buffer: Uint8Array, offset: number) => void) => void
+  /**
+   * @param size - Number of bytes to write
+   * @param fn - Callback receiving the buffer, the DataView, and the current offset
+   */
+  write: (size: number, fn: (view: DataView, offset: number) => void) => void
 }
 
 /** Reads bytes from a buffer. */
 export type Reader = {
-  read: <R>(size: number, fn: (buffer: Uint8Array, offset: number, end: number) => R) => R
+  /**
+   * @param size - Number of bytes to read
+   * @param fn - Callback receiving the DataView, the current offset, and the new offset
+   */
+  read: <R>(size: number, fn: (view: DataView, offset: number) => R) => R
+  /** Reads raw bytes directly (zero-copy subarray). Useful for strings/buffers where DataView isn't needed. */
+  readBytes: (size: number) => Uint8Array
+  /**
+   * Validates that allocating 'count' items is safe by checking against global limits and remaining buffer size.
+   * @throws BinError if count is malicious or too large.
+   */
+  checkList: (count: number) => void
 }
 
 // ==========================================
@@ -62,8 +78,8 @@ export const size = <E, N extends number = number>(codec: FixedSize<N, any, E> |
 // ==========================================
 
 export type Ok<T> = { ok: true; value: T }
-export type Err = { ok: false; error: Error }
-export type Result<T> = Ok<T> | Err
+export type Err<E = BinError> = { ok: false; error: E }
+export type Result<T, E = BinError> = Ok<T> | Err<E>
 
 // ==========================================
 // Validation Types

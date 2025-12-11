@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": false, "outDir": "lib/esm" },
+  "compilerOptions": { "rootDir": "src", "noEmit": false, "outDir": "lib/esm" },
   "include": ["src/**/*"],
   "exclude": ["src/**/*.test.ts"]
 }
