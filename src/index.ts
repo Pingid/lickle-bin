@@ -1,9 +1,10 @@
 import { Writer, Reader, BinCode, Decoder, Encoder, Infer, Result, DynamicSize, size } from './core.js'
 import { reader, checkedReader, writer } from './io.js'
-import { BinError, ErrorCode } from './error.js'
+import { BinError, ErrorCode, fail } from './error.js'
 import { Uint32, Uint16 } from './codecs.js'
 
 export * from './codecs.js'
+export * from './error.js'
 export * from './core.js'
 export * from './io.js'
 
@@ -31,7 +32,7 @@ export const tryDecode = <T>(codec: Decoder<T>, data: Uint8Array): Result<T> => 
     return { ok: true, value: codec.d(checkedReader(data)) }
   } catch (e: any) {
     if (e instanceof BinError) return { ok: false, error: e }
-    return { ok: false, error: new BinError(ErrorCode.UNKNOWN, e?.message ?? String(e)) }
+    return { ok: false, error: fail(ErrorCode.UNKNOWN, e?.message ?? String(e), undefined, tryDecode) }
   }
 }
 

@@ -40,16 +40,19 @@
     "esm": "tsc -p ./tsconfig.esm.json",
     "cjs": "tsc -p ./tsconfig.cjs.json",
     "typecheck": "tsc --noEmit",
-    "bench": "BENCH_FORMAT=json tsx bench.ts",
+    "bench": "BENCH_FORMAT=json tsx bench/bench.ts",
+    "bench:compare": "tsx ./bin/perf.ts",
     "test": "vitest"
   },
   "devDependencies": {
     "@mitata/counters": "^0.0.8",
     "@types/node": "^25.0.0",
-    "esbuild": "^0.27.1",
+    "execa": "^9.6.1",
+    "fast-check": "^4.4.0",
     "jsr": "^0.13.5",
     "mitata": "^1.0.34",
     "prettier": "^3.7.4",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
   },

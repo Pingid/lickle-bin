@@ -1,0 +1,79 @@
+import { it, expect } from 'vitest'
+
+import * as b from '../src/jit/index.js'
+import { Infer } from '../src/core.js'
+
+export const test = b.struct({
+  uint8: b.uint8(),
+  uint16: b.uint16(),
+  uint32: b.uint32(),
+  int8: b.int8(),
+  int16: b.int16(),
+  int32: b.int32(),
+  float32: b.float32(),
+  float64: b.float64(),
+  bigInt64: b.bigInt64(),
+  bigUint64: b.bigUint64(),
+  vuint: b.vuint(),
+  vint: b.vint(),
+
+  utf8: b.utf8(),
+  utf8Fixed: b.utf8({ fixed: 3 }),
+  optional1: b.optional(b.utf8()),
+  optional2: b.optional(b.utf8()),
+
+  nullable1: b.nullable(b.utf8()),
+  nullable2: b.nullable(b.utf8()),
+
+  array: b.array(b.utf8()),
+  tuple: b.tuple(b.uint8(), b.uint16(), b.uint32()),
+  struct: b.struct({ a: b.utf8(), b: b.utf8(), optional: b.optional(b.utf8()) }),
+  partial: b.partial(b.struct({ a: b.utf8(), b: b.utf8(), optional: b.optional(b.utf8()) })),
+
+  taggedUnion: b.taggedUnion({
+    one: b.struct({ type: b.uint8(), name: b.utf8() }),
+    two: b.array(b.uint8()),
+  }),
+
+  discriminatedUnion: b.discriminatedUnion('tag', [
+    b.struct({ tag: b.literal('a'), a: b.utf8() }),
+    b.struct({ tag: b.literal('b'), b: b.utf8() }),
+  ]),
+
+  json: b.json<{ a: string; b: number }>(),
+  intersection: b.intersection([b.struct({ a: b.utf8() }), b.partial(b.struct({ b: b.utf8() }))]),
+})
+
+it('should encode and decode', () => {
+  type Encode = Infer<typeof test>['encode']
+  const value: Encode = {
+    uint8: 10,
+    uint16: 10,
+    uint32: 10,
+    int8: 10,
+    int16: 10,
+    int32: 10,
+    float32: 10,
+    float64: 10,
+    bigInt64: 10n,
+    bigUint64: 10n,
+    utf8: 'Some foo some bar',
+    utf8Fixed: '123',
+    vuint: 10,
+    vint: -10,
+    optional2: '456',
+    nullable1: null,
+    nullable2: 'test',
+    array: ['test', 'test2'],
+    tuple: [1, 2, 3],
+    struct: { b: 'bar', a: 'foo' },
+    partial: { a: 'foo', optional: 'test' },
+    taggedUnion: ['two', [1]],
+    discriminatedUnion: { tag: 'a', a: 'foo' },
+    json: { a: 'foo', b: 10 },
+    intersection: { a: 'foo', b: 'bar' },
+  }
+  const encoded = b.compileEncoder(test)(value)
+  const decoded = b.compileDecoder(test)(encoded)
+  expect(decoded).toEqual(value)
+})

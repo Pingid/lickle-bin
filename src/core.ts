@@ -13,6 +13,8 @@ export type Writer = Cursor
 export type Reader = Cursor & {
   /** reads bytes and advances pos */
   readBytes: (size: number) => Uint8Array
+  /** checks if the offset and bytes are within the buffer */
+  check: (offset: number, bytes: number) => void
   /** checks if the list length is safe */
   checkList: (count: number) => void
 }

@@ -175,6 +175,73 @@ export const bigInt64 = bigNumCodec(
 /** Creates a codec for a 64-bit unsigned BigInt. */
 export const BigInt64 = bigInt64('be')
 
+/**
+ * Unsigned Variable Length Integer (32-bit).
+ * Encodes numbers into 1-5 bytes based on size.
+ * ideal for: Array lengths, Enums, Small IDs.
+ */
+export const vuint = (): DynamicSize<number> => ({
+  s: (v) => {
+    let len = 1
+    // Loop until v fits in 7 bits (v < 128)
+    while (v >= 0x80) {
+      v >>>= 7
+      len++
+    }
+    return len
+  },
+  e: (w, v) => {
+    // While value > 127, write 7 bits | 0x80 (continuation bit)
+    while (v >= 0x80) {
+      w.view.setUint8(w.pos, (v & 0x7f) | 0x80)
+      w.pos++
+      v >>>= 7
+    }
+    // Write last byte
+    w.view.setUint8(w.pos, v)
+    w.pos++
+  },
+  d: (r) => {
+    let val = 0
+    let shift = 0
+    while (true) {
+      const b = r.view.getUint8(r.pos)
+      r.pos++
+      // Add lower 7 bits to value
+      val |= (b & 0x7f) << shift
+      // If continuation bit (0x80) is 0, we are done
+      if ((b & 0x80) === 0) return val >>> 0
+      shift += 7
+      // Safety guard: 32-bit integers shouldn't exceed 5 bytes
+      if (shift >= 35) {
+        throw new Error('Integer overflow: Varint too large for 32-bit')
+      }
+    }
+  },
+})
+
+/**
+ * Unsigned Variable Length Integer (32-bit).
+ * Encodes numbers into 1-5 bytes based on size.
+ * ideal for: Array lengths, Enums, Small IDs.
+ */
+export const Vuint: DynamicSize<number> = vuint()
+
+/**
+ * Signed Variable Length Integer (32-bit).
+ * Uses ZigZag encoding to map negative numbers to positive integers efficienty.
+ * 0 => 0, -1 => 1, 1 => 2, -2 => 3 ...
+ */
+export const vint = (): DynamicSize<number> => ({
+  s: (v) => Vuint.s((v << 1) ^ (v >> 31)),
+  e: (w, v) => Vuint.e(w, (v << 1) ^ (v >> 31)),
+  d: (r) => {
+    const n = Vuint.d(r)
+    // ZigZag Decode: (n >>> 1) ^ -(n & 1)
+    return (n >>> 1) ^ -(n & 1)
+  },
+})
+
 /** Codec for a boolean value, encoded as a single byte. */
 export const Bool: FixedSize<1, boolean> = {
   s: Uint8.s,
@@ -354,21 +421,21 @@ export const array = <D, E = D>(inner: BinCode<D, E>, options?: { maxLength?: nu
       if (typeof max === 'number' && v.length > max) {
         return fail(ErrorCode.SIZE_LIMIT, `Array length ${v.length} exceeds max ${max}`)
       }
-      return Uint32.s + v.reduce((a, x) => a + size(inner, x), 0)
+      return Vuint.s(v.length) + v.reduce((a, x) => a + size(inner, x), 0)
     },
 
     e: (w, v) => {
       if (typeof max === 'number' && v.length > max) {
         return fail(ErrorCode.SIZE_LIMIT, `Array length ${v.length} exceeds max ${max}`)
       }
-      Uint32.e(w, v.length)
+      Vuint.e(w, v.length)
       for (let i = 0; i < v.length; i++) {
         withContext(`[${i}]`, () => inner.e(w, v[i]!))
       }
     },
 
     d: (r) => {
-      const n = Uint32.d(r)
+      const n = Vuint.d(r)
 
       // 1. Check Schema constraints (Specific to this field)
       if (typeof max === 'number' && n > max) {

@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest'
 
-import * as b from './index.js'
+import * as b from '../src/index.js'
 
 export const test = b.struct({
   uint8: b.uint8(),
@@ -13,6 +13,8 @@ export const test = b.struct({
   float64: b.float64(),
   bigInt64: b.bigInt64(),
   bigUint64: b.bigUint64(),
+  vuint: b.vuint(),
+  vint: b.vint(),
 
   utf8: b.utf8(),
   utf8Fixed: b.utf8({ fixed: 3 }),
@@ -56,6 +58,8 @@ it('should encode and decode', () => {
     bigUint64: 10n,
     utf8: 'Some foo some bar',
     utf8Fixed: '123',
+    vuint: 10,
+    vint: -10,
     optional2: '456',
     nullable1: null,
     nullable2: 'test',

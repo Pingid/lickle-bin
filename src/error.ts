@@ -20,10 +20,10 @@ export class BinError extends Error {
 }
 
 /** Throws a BincodeError and cleans the stack trace so it points to the caller. */
-export const fail = (code: ErrorCode, msg: string, offset?: number): never => {
+export const fail = (code: ErrorCode, msg: string, offset?: number, fn?: Function): never => {
   const e = new BinError(code, msg, offset)
   if ('captureStackTrace' in Error) {
-    ;(Error as any).captureStackTrace(e, fail)
+    ;(Error as any).captureStackTrace(e, fn ?? fail)
   }
   throw e
 }
