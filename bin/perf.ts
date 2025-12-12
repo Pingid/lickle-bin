@@ -31,6 +31,7 @@ const run = async () => {
   const results: Entry[] = []
 
   for (const rev of revs) {
+    if (rev === 'CURRENT') continue
     const hash = await git.rev(rev)
     const info = await git.info(hash)
     console.log(`benchmarking [\x1b[1m${info}\x1b[0m]`)
@@ -38,9 +39,9 @@ const run = async () => {
     results.push({ label: info, result: data })
   }
 
-  if (changes && revs.length === 1) {
-    const current_hash = await git.current_hash()
-    const current = await cache.with(current_hash + (is_sudo() ? '-sudo' : ''), () => run_benchmark())()
+  if ((changes && revs.length === 1) || revs.includes('CURRENT')) {
+    console.log(`benchmarking [\x1b[1mCURRENT\x1b[0m]`)
+    const current = await run_benchmark()
     results.push({ label: 'CURRENT', result: current })
   }
 

@@ -40,7 +40,7 @@
     "esm": "tsc -p ./tsconfig.esm.json",
     "cjs": "tsc -p ./tsconfig.cjs.json",
     "typecheck": "tsc --noEmit",
-    "bench": "BENCH_FORMAT=json tsx bench/bench.ts",
+    "bench": "BENCH_FORMAT=json tsx bench/v3.ts",
     "bench:compare": "tsx ./bin/perf.ts",
     "test": "vitest"
   },
