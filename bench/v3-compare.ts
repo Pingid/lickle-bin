@@ -1,8 +1,11 @@
 import { run, bench, group } from 'mitata'
 
-import { createEncoder, createDecoder } from '../src/v3/runtime/index.js'
+import { compileDecoder, compileEncoder } from '../src/jit/io.js'
+import * as Runtime from '../src/v3/runtime/index.js'
+import * as JIT from '../src/v3/jitt/index.js'
 import * as v3 from '../src/v3/schema/index.js'
-import * as c from '../src/index.js'
+import * as c from '../src/jit/index.js'
+import * as old from '../src/index.js'
 
 // 1. Define a realistic schema
 const UserSchema = c.struct({
@@ -49,20 +52,40 @@ const DATA = {
   },
 }
 
-// 3. Prepare buffers for decode tests
-const encode = createEncoder(V3UserSchema, { boundsCheck: false, strictRange: false, initialBufferSize: 111 })
-const decode = createDecoder(V3UserSchema, { boundsCheck: false, strictEOF: false })
-const BINARY_ENCODED = encode(DATA)
+const decoderOpts = {
+  boundsCheck: true,
+  // maxStringLength: Infinity, // Important: Disables the 'if > max' check
+  // maxListLength: Infinity, // Important: Disables the 'if > max' check
+}
+const encoderOpts = {
+  boundsCheck: true,
+  strictRange: true,
+  // initialBufferSize: 111,
+}
 
-// 4. Run Benchmarks
+// 3. Prepare buffers for decode tests
+const runtimeEncode = Runtime.createEncoder(V3UserSchema, encoderOpts)
+const jitEncode = JIT.createEncoder(V3UserSchema, encoderOpts)
+const runtimeDecode = Runtime.createDecoder(V3UserSchema, decoderOpts)
+const jitDecode = JIT.createDecoder(V3UserSchema, decoderOpts)
+const NEW_BINARY_ENCODED = runtimeEncode(DATA)
+const OLD_BINARY_ENCODED = old.encode(UserSchema, DATA)
+
+const oldJitEncode = compileEncoder(UserSchema)
+const oldJitDecode = compileDecoder(UserSchema)
+
 group('Encode', () => {
-  bench('Previous Encode', () => c.encode(UserSchema, DATA)).baseline()
-  bench('New Encode', () => encode(DATA))
+  bench('Previous Runtime Encode', () => old.encode(UserSchema, DATA))
+  bench('New Runtime Encode', () => runtimeEncode(DATA))
+  bench('Previous JIT Runtime Encode', () => oldJitEncode(DATA))
+  bench('New JIT Runtime Encode', () => jitEncode(DATA))
 })
 
 group('Decode', () => {
-  bench('Previous Decode', () => c.decode(UserSchema, BINARY_ENCODED)).baseline()
-  bench('New Decode', () => decode(BINARY_ENCODED))
+  bench('Previous Runtime Decode', () => old.decode(UserSchema, OLD_BINARY_ENCODED))
+  bench('New Runtime Decode', () => runtimeDecode(NEW_BINARY_ENCODED))
+  bench('Previous JIT Runtime Decode', () => oldJitDecode(OLD_BINARY_ENCODED))
+  bench('New JIT Runtime Decode', () => jitDecode(NEW_BINARY_ENCODED))
 })
 
 const format =

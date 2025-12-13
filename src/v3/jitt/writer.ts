@@ -74,33 +74,24 @@ export const createWriter = (
     wrap: (internal) => {
       const c = createCtx()
       const inputVar = 'input'
-
-      // Generate the body
+      c.write(`const ${c.view} = new DataView(${c.buf}.buffer, ${c.buf}.byteOffset, ${c.buf}.byteLength);`)
       internal(c, inputVar as any)
-
-      // Add return statement
       c.write(`return ${c.pos};`)
-
-      // Retrieve code and imports
       const code = c.body()
-      const argNames = [inputVar, 'buf', 'view', 'pos', ...c.imports.keys()]
-      const fn = new Function(...argNames, code) as (
-        val: any,
-        buf: Uint8Array,
-        view: DataView,
-        pos: number,
-        ...imports: any[]
-      ) => number
+      const importKeys = Array.from(c.imports.keys())
       const importValues = Array.from(c.imports.values())
 
-      // Return the runtime Encoder function
+      const factory = new Function(
+        ...importKeys,
+        `return function JitEncode(${inputVar}, ${c.buf}, ${c.pos}) {
+          ${code}
+        }`,
+      )
+      const fn = factory(...importValues)
       return (val: any) => {
         const bufLen = size ?? opts.initialBufferSize
         const buf = new Uint8Array(bufLen)
-        const view = new DataView(buf.buffer)
-
-        const finalPos = fn(val, buf, view, 0, ...importValues)
-
+        const finalPos = fn(val, buf, 0)
         return buf.subarray(0, finalPos)
       }
     },
@@ -121,7 +112,13 @@ const createCtx = (): JitWriteContext & { imports: Map<string, any>; body: () =>
       imports.set(id, val)
       return id
     },
-    access: (v, k) => `${v}[${typeof k === 'string' ? `'${k}'` : k}]`,
+    access: (v, k) => {
+      // Use dot notation if k is a valid simple identifier
+      if (typeof k === 'string' && /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k)) {
+        return `${v}.${k}`
+      }
+      return `${v}[${typeof k === 'string' ? `'${k}'` : k}]`
+    },
     view: 'view',
     pos: 'pos',
     buf: 'buf',
@@ -232,23 +229,29 @@ const f64 =
 const encoder = new TextEncoder()
 const str = (check: boolean) => () => (c: JitWriteContext, v: string) => {
   const enc = c.import('encoder', encoder)
-  const encoded = c.var('encoded')
-  const len = c.var('len')
 
-  // For safety, we encode to a temporary array first to know the exact size
-  c.write(`const ${encoded} = ${enc}.encode(${v});`)
-  c.write(`const ${len} = ${encoded}.length;`)
+  // Use a fixed reservation for the length prefix (4 bytes)
+  // We save the current position to write the length later
+  const startPos = c.var('start')
+  c.write(`const ${startPos} = ${c.pos};`)
+  c.write(`${c.pos} += 4;`) // Advance past length prefix
 
-  // Check if we have space for length prefix + encoded string
+  // Optimization: use encodeInto directly into the target buffer
+  // This avoids allocating a temporary Uint8Array
+  const res = c.var('res')
+
   if (check) {
-    c.write(`if (${c.pos} + 4 + ${len} > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
+    // Safety check logic (simplified for brevity, you might want a "ensure" helper in JIT)
+    // Since encodeInto doesn't expand, we must ensure space exists or handle the result
+    c.write(`const ${res} = ${enc}.encodeInto(${v}, ${c.buf}.subarray(${c.pos}));`)
+    c.write(`if (${res}.read < ${v}.length) throw new Error('Buffer overflow');`)
+  } else {
+    c.write(`const ${res} = ${enc}.encodeInto(${v}, ${c.buf}.subarray(${c.pos}));`)
   }
 
-  // Write length prefix (big endian)
-  c.write(`${c.view}.setUint32(${c.pos}, ${len}, false);`)
-  c.write(`${c.pos} += 4;`)
+  // Go back and write the length
+  c.write(`${c.view}.setUint32(${startPos}, ${res}.written, false);`)
 
-  // Copy encoded bytes
-  c.write(`${c.buf}.set(${encoded}, ${c.pos});`)
-  c.write(`${c.pos} += ${len};`)
+  // Advance position by bytes written
+  c.write(`${c.pos} += ${res}.written;`)
 }

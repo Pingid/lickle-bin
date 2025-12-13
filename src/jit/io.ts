@@ -38,6 +38,7 @@ export const compileEncoder: {
   const fnBody = lines.join('\n')
   const importKeys = ['codec', ...Object.keys(imports)]
   const importValues = [codec, ...Object.values(imports)]
+  // console.log(`return function OldEncode(val) { ${fnBody} }`)
   const factory = new Function(...importKeys, `return function CompiledEncode(val) { ${fnBody} }`)
   return factory(...importValues)
 }
@@ -76,6 +77,7 @@ export const compileDecoder: {
   const fnBody = lines.join('\n')
   const importKeys = Object.keys(imports)
   const importValues = Object.values(imports)
+
   const factory = new Function(...importKeys, `return function CompiledDecode(buf) { ${fnBody} }`)
   return factory(...importValues)
 }
