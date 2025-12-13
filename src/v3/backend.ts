@@ -35,7 +35,6 @@ export interface Backend<Ctx, M extends Mode, K extends Kernel> {
   struct(shape: Record<string, Op<M, Ctx, any>>): Op<M, Ctx, any>
   list(inner: Op<M, Ctx, any>): Op<M, Ctx, any>
 
-  access(value: unknown, key: string | number): unknown
   wrap<T>(internal: Op<M, Ctx, T>): Wrap<M, T>
 }
 

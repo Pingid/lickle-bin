@@ -2,13 +2,13 @@ export * from './reader.js'
 export * from './writer.js'
 
 import { DecoderOptions, EncoderOptions } from '../backend.js'
-import { createReader as createBackend } from './reader.js'
 import { isSized, Schema } from '../schema/index.js'
+import { createReader } from './reader.js'
 import { createWriter } from './writer.js'
 import { compile } from '../compiler.js'
 
 export const createDecoder = <T>(schema: Schema<T>, opts?: DecoderOptions) => {
-  const backend = createBackend(opts)
+  const backend = createReader(opts)
   const internalDecoder = compile(schema, backend)
   return backend.wrap<T>(internalDecoder)
 }

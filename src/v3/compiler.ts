@@ -1,4 +1,4 @@
-import { Backend, Kernel, Mode } from './types.js'
+import { Backend, Kernel, Mode } from './backend.js'
 import { Schema } from './schema/index.js'
 
 export const compile = <Ctx, M extends Mode, K extends Kernel>(

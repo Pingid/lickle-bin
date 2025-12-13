@@ -6,10 +6,10 @@
 export type Cursor = { buf: Uint8Array; view: DataView; pos: number }
 
 /** Writes bytes to a buffer. */
-export type WriteCursor = Cursor & { ensure: (bytes: number) => void }
+export type WriteCursor = Cursor & { maxBufferSize: number | undefined; boundsCheck: boolean; fixed: boolean }
 
 /** Reads bytes from a buffer. */
-export type ReadCursor = Cursor & { ensure: (bytes: number) => void }
+export type ReadCursor = Cursor & { boundsCheck: boolean }
 
 // ==========================================
 // Codec Types

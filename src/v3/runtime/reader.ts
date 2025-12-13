@@ -60,11 +60,7 @@ export const createReader = (userOpts?: DecoderOptions): Backend<ReadCursor, 're
           buf: input,
           view: new DataView(input.buffer, input.byteOffset, input.byteLength),
           pos: 0,
-          ensure: opts.boundsCheck
-            ? (bytes: number) => {
-                if (c.pos + bytes > c.buf.byteLength) eof(c, bytes)
-              }
-            : () => {},
+          boundsCheck: opts.boundsCheck,
         }
         const result = internal(c)
 
@@ -95,7 +91,7 @@ const boolUnsafe = () => (c: ReadCursor) => {
 }
 
 const boolSafe = () => (c: ReadCursor) => {
-  c.ensure(1)
+  ensure(c, 1)
   const v = c.view.getUint8(c.pos)
   c.pos += 1
   return v !== 0
@@ -112,7 +108,7 @@ const i8Unsafe = () => (c: ReadCursor) => {
 }
 
 const i8Safe = () => (c: ReadCursor) => {
-  c.ensure(1)
+  ensure(c, 1)
   const v = c.view.getInt8(c.pos)
   c.pos += 1
   return v
@@ -125,7 +121,7 @@ const u8Unsafe = () => (c: ReadCursor) => {
 }
 
 const u8Safe = () => (c: ReadCursor) => {
-  c.ensure(1)
+  ensure(c, 1)
   const v = c.view.getUint8(c.pos)
   c.pos += 1
   return v
@@ -147,7 +143,7 @@ const i16Unsafe = (endian?: Endian) => {
 const i16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(2)
+    ensure(c, 2)
     const v = c.view.getInt16(c.pos, le)
     c.pos += 2
     return v
@@ -166,7 +162,7 @@ const u16Unsafe = (endian?: Endian) => {
 const u16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(2)
+    ensure(c, 2)
     const v = c.view.getUint16(c.pos, le)
     c.pos += 2
     return v
@@ -185,7 +181,7 @@ const f16Unsafe = (endian?: Endian) => {
 const f16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(2)
+    ensure(c, 2)
     const v = c.view.getFloat16(c.pos, le)
     c.pos += 2
     return v
@@ -208,7 +204,7 @@ const i32Unsafe = (endian?: Endian) => {
 const i32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(4)
+    ensure(c, 4)
     const v = c.view.getInt32(c.pos, le)
     c.pos += 4
     return v
@@ -227,7 +223,7 @@ const u32Unsafe = (endian?: Endian) => {
 const u32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(4)
+    ensure(c, 4)
     const v = c.view.getUint32(c.pos, le)
     c.pos += 4
     return v
@@ -246,7 +242,7 @@ const f32Unsafe = (endian?: Endian) => {
 const f32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(4)
+    ensure(c, 4)
     const v = c.view.getFloat32(c.pos, le)
     c.pos += 4
     return v
@@ -269,7 +265,7 @@ const i64Unsafe = (endian?: Endian) => {
 const i64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(8)
+    ensure(c, 8)
     const v = c.view.getBigInt64(c.pos, le)
     c.pos += 8
     return v
@@ -288,7 +284,7 @@ const u64Unsafe = (endian?: Endian) => {
 const u64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(8)
+    ensure(c, 8)
     const v = c.view.getBigUint64(c.pos, le)
     c.pos += 8
     return v
@@ -307,7 +303,7 @@ const f64Unsafe = (endian?: Endian) => {
 const f64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    c.ensure(8)
+    ensure(c, 8)
     const v = c.view.getFloat64(c.pos, le)
     c.pos += 8
     return v
@@ -326,7 +322,7 @@ const strUnsafe = (dec: TextDecoder) => () => (c: ReadCursor) => {
 }
 
 const strSafe = (dec: TextDecoder, maxLen: number) => () => (c: ReadCursor) => {
-  if (c.pos + 4 > c.buf.byteLength) return eof(c, 4)
+  ensure(c, 4)
   const len = c.view.getUint32(c.pos, false) // BE
   c.pos += 4
 
@@ -477,4 +473,8 @@ const optimizedStruct = (shape: Record<string, (c: ReadCursor) => any>): ((c: Re
     }
     return result
   }
+}
+
+const ensure = (c: ReadCursor, bytes: number) => {
+  if (c.boundsCheck && c.pos + bytes > c.buf.byteLength) eof(c, bytes)
 }
