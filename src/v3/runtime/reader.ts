@@ -52,8 +52,6 @@ export const createReader = (userOpts?: DecoderOptions): Backend<ReadCursor, 're
       }
     },
 
-    access: (value: any, key: string | number) => value[key],
-
     wrap: <T>(internal: (c: ReadCursor) => T) => {
       return (input: Uint8Array) => {
         const c: ReadCursor = {

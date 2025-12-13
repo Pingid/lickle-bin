@@ -9,7 +9,7 @@ interface JitKernel extends Kernel {
   Buffer: string
 }
 
-export type JitContext = {
+export type JitWriteContext = {
   // Generate a unique variable name (e.g., "v1", "i2")
   var: (prefix?: string) => string
   // Add a line of code to the function body
@@ -26,24 +26,28 @@ export type JitContext = {
   buf: string
 }
 
-export const createWriter = (userOpts?: EncoderOptions, size?: number): Backend<JitContext, 'write', JitKernel> => {
+export const createWriter = (
+  userOpts?: EncoderOptions,
+  size?: number,
+): Backend<JitWriteContext, 'write', JitKernel> => {
   const opts = { ...DEFAULT_ENCODER_OPTIONS, ...userOpts }
+  const check = opts.boundsCheck
 
   return {
     mode: 'write',
-    bool,
-    i8,
-    u8,
-    i16,
-    u16,
-    f16,
-    i32,
-    u32,
-    f32,
-    i64,
-    u64,
-    f64,
-    str,
+    bool: bool(check),
+    i8: i8(check),
+    u8: u8(check),
+    i16: i16(check),
+    u16: u16(check),
+    f16: f16(check),
+    i32: i32(check),
+    u32: u32(check),
+    f32: f32(check),
+    i64: i64(check),
+    u64: u64(check),
+    f64: f64(check),
+    str: str(check),
 
     struct: (shape) => (c, v) => {
       for (const key in shape) {
@@ -74,36 +78,28 @@ export const createWriter = (userOpts?: EncoderOptions, size?: number): Backend<
       // Generate the body
       internal(c, inputVar as any)
 
+      // Add return statement
+      c.write(`return ${c.pos};`)
+
       // Retrieve code and imports
       const code = c.body()
       const argNames = [inputVar, 'buf', 'view', 'pos', ...c.imports.keys()]
-      const fn = new Function(...argNames, code)
+      const fn = new Function(...argNames, code) as (
+        val: any,
+        buf: Uint8Array,
+        view: DataView,
+        pos: number,
+        ...imports: any[]
+      ) => number
       const importValues = Array.from(c.imports.values())
 
       // Return the runtime Encoder function
       return (val: any) => {
-        // Simple buffer management for the JIT example
-        // In a real JIT, we might generate the resizing logic into the function itself
         const bufLen = size ?? opts.initialBufferSize
         const buf = new Uint8Array(bufLen)
         const view = new DataView(buf.buffer)
 
-        // Note: The JIT function updates 'pos' internally (conceptually),
-        // but since 'pos' is a primitive passed by value, we can't get the new position out
-        // unless we return it or use an object wrapper.
-        // The standard JIT pattern usually passes a 'cursor' object or returns the new offset.
-        // To fix the original architecture's limitation in 'wrap':
-
-        // We will inject a wrapper for 'pos' or rely on the function returning something?
-        // The architecture in `writer.ts` implies direct mutation of `pos` variable code.
-        // Since `new Function` cannot mutate a number in the outer scope, we assume
-        // strict size calculation occurred before or we change the signature to use a cursor object.
-
-        // HOWEVER, sticking to the requested `wrap` signature:
-        // We can make the JIT function return the final `pos`.
-
-        const wrapperFn = new Function(...argNames, code + `\nreturn ${c.pos};`)
-        const finalPos = wrapperFn(val, buf, view, 0, ...importValues)
+        const finalPos = fn(val, buf, view, 0, ...importValues)
 
         return buf.subarray(0, finalPos)
       }
@@ -112,7 +108,7 @@ export const createWriter = (userOpts?: EncoderOptions, size?: number): Backend<
 }
 
 // Helper to manage JIT state (Identical to Reader, can be shared)
-const createCtx = (): JitContext & { imports: Map<string, any>; body: () => string } => {
+const createCtx = (): JitWriteContext & { imports: Map<string, any>; body: () => string } => {
   let vCount = 0
   const lines: string[] = []
   const imports = new Map<string, any>()
@@ -134,92 +130,125 @@ const createCtx = (): JitContext & { imports: Map<string, any>; body: () => stri
   }
 }
 
-const bool = () => (c: JitContext, v: JitKernel['Bool']) => {
+const bool = (check: boolean) => () => (c: JitWriteContext, v: JitKernel['Bool']) => {
+  if (check) c.write(`if (${c.pos} + 1 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
   c.write(`${c.view}.setUint8(${c.pos}, ${v} ? 1 : 0);`)
   c.write(`${c.pos}++;`)
 }
 
-const i8 = () => (c: JitContext, v: JitKernel['Num']) => {
+const i8 = (check: boolean) => () => (c: JitWriteContext, v: JitKernel['Num']) => {
+  if (check) c.write(`if (${c.pos} + 1 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
   c.write(`${c.view}.setInt8(${c.pos}, ${v});`)
   c.write(`${c.pos}++;`)
 }
 
-const u8 = () => (c: JitContext, v: JitKernel['Num']) => {
+const u8 = (check: boolean) => () => (c: JitWriteContext, v: JitKernel['Num']) => {
+  if (check) c.write(`if (${c.pos} + 1 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
   c.write(`${c.view}.setUint8(${c.pos}, ${v});`)
   c.write(`${c.pos}++;`)
 }
 
 const i16 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['Num']) => {
+  (c: JitWriteContext, v: JitKernel['Num']) => {
+    if (check) c.write(`if (${c.pos} + 2 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setInt16(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 2;`)
   }
 
 const u16 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['Num']) => {
+  (c: JitWriteContext, v: JitKernel['Num']) => {
+    if (check) c.write(`if (${c.pos} + 2 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setUint16(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 2;`)
   }
 
 const f16 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['Num']) => {
+  (c: JitWriteContext, v: JitKernel['Num']) => {
+    if (check) c.write(`if (${c.pos} + 2 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setFloat16(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 2;`)
   }
 
 const i32 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['Num']) => {
+  (c: JitWriteContext, v: JitKernel['Num']) => {
+    if (check) c.write(`if (${c.pos} + 4 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setInt32(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 4;`)
   }
 
 const u32 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['Num']) => {
+  (c: JitWriteContext, v: JitKernel['Num']) => {
+    if (check) c.write(`if (${c.pos} + 4 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setUint32(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 4;`)
   }
 
 const f32 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['Num']) => {
+  (c: JitWriteContext, v: JitKernel['Num']) => {
+    if (check) c.write(`if (${c.pos} + 4 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setFloat32(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 4;`)
   }
 
 const i64 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['BigNum']) => {
+  (c: JitWriteContext, v: JitKernel['BigNum']) => {
+    if (check) c.write(`if (${c.pos} + 8 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setBigInt64(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 8;`)
   }
 
 const u64 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['BigNum']) => {
+  (c: JitWriteContext, v: JitKernel['BigNum']) => {
+    if (check) c.write(`if (${c.pos} + 8 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setBigUint64(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 8;`)
   }
 
 const f64 =
+  (check: boolean) =>
   (endian: Endian = 'be') =>
-  (c: JitContext, v: JitKernel['Num']) => {
+  (c: JitWriteContext, v: JitKernel['Num']) => {
+    if (check) c.write(`if (${c.pos} + 8 > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
     c.write(`${c.view}.setFloat64(${c.pos}, ${v}, ${endian === 'le'});`)
     c.write(`${c.pos} += 8;`)
   }
 
 const encoder = new TextEncoder()
-const str = () => (c: JitContext, v: string) => {
-  const start = c.var('start')
-  c.write(`const ${start} = ${c.pos};`)
-  c.write(`${c.pos} += 4;`)
+const str = (check: boolean) => () => (c: JitWriteContext, v: string) => {
   const enc = c.import('encoder', encoder)
-  const result = c.var('result')
-  c.write(`const ${result} = ${enc}.encodeInto(${v}, ${c.buf}.subarray(${c.pos}));`)
-  c.write(`${c.view}.setUint32(${start}, ${c.access(result, 'written')}, false);`)
-  c.write(`${c.pos} += ${c.access(result, 'written')};`)
+  const encoded = c.var('encoded')
+  const len = c.var('len')
+
+  // For safety, we encode to a temporary array first to know the exact size
+  c.write(`const ${encoded} = ${enc}.encode(${v});`)
+  c.write(`const ${len} = ${encoded}.length;`)
+
+  // Check if we have space for length prefix + encoded string
+  if (check) {
+    c.write(`if (${c.pos} + 4 + ${len} > ${c.buf}.byteLength) throw new Error('Buffer overflow');`)
+  }
+
+  // Write length prefix (big endian)
+  c.write(`${c.view}.setUint32(${c.pos}, ${len}, false);`)
+  c.write(`${c.pos} += 4;`)
+
+  // Copy encoded bytes
+  c.write(`${c.buf}.set(${encoded}, ${c.pos});`)
+  c.write(`${c.pos} += ${len};`)
 }
