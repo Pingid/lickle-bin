@@ -1,6 +1,5 @@
 import { Backend, EncoderOptions, Kernel, Endian } from '../backend.js'
 import { DEFAULT_ENCODER_OPTIONS } from '../backend.js'
-import { BufferStrategy } from './allocator.js'
 import { ErrorCode, fail } from '../error.js'
 import { WriteCursor } from '../types.js'
 
@@ -13,10 +12,7 @@ interface RuntimeKernel extends Kernel {
   Buffer: Uint8Array<ArrayBufferLike>
 }
 
-export const createWriter = (
-  strategy: BufferStrategy,
-  options?: EncoderOptions,
-): Backend<WriteCursor, 'write', RuntimeKernel> => {
+export const createWriter = (options?: EncoderOptions, size?: number): Backend<WriteCursor, 'write', RuntimeKernel> => {
   const opts = { ...DEFAULT_ENCODER_OPTIONS, ...options }
   const check = opts.boundsCheck
   const ENC = new TextEncoder()
@@ -65,14 +61,56 @@ export const createWriter = (
     access: (value: any, key: string | number) => value[key],
     wrap: <T>(internal: (c: WriteCursor, v: T) => void) => {
       return (val: T) => {
-        const cursor = strategy.start()
+        const cursor = createCursor(opts, size)
         internal(cursor, val)
-        return strategy.finish(cursor)
+        return cursor.buf.subarray(0, cursor.pos)
       }
     },
   }
 }
 
+const createCursor = (opts: EncoderOptions, size?: number): WriteCursor => {
+  if (typeof size === 'number') {
+    const buf = new Uint8Array(size)
+    const ensure = opts.boundsCheck
+      ? (bytes: number) => {
+          if (c.pos + bytes > c.buf.byteLength) eof(c, bytes)
+        }
+      : noop
+    return { buf, view: new DataView(buf.buffer, buf.byteOffset, buf.byteLength), pos: 0, ensure }
+  }
+
+  const buf = new Uint8Array(opts?.initialBufferSize ?? 512)
+  const c: WriteCursor = {
+    buf,
+    view: new DataView(buf.buffer),
+    pos: 0,
+    ensure: (needed) => {
+      const required = c.pos + needed
+      if (required > c.buf.byteLength) {
+        // Growth Logic: Double size until it fits
+        let newSize = c.buf.byteLength * 2
+        while (newSize < required) newSize *= 2
+
+        // Security Cap
+        if (opts?.maxBufferSize && newSize > opts.maxBufferSize) {
+          return fail(ErrorCode.OVERFLOW, 'Max buffer size exceeded', c.pos)
+        }
+
+        // Re-allocate and Copy
+        const newBuf = new Uint8Array(newSize)
+        newBuf.set(c.buf)
+
+        // Update Cursor References
+        c.buf = newBuf
+        c.view = new DataView(newBuf.buffer, newBuf.byteOffset, newBuf.byteLength)
+      }
+    },
+  }
+  return c
+}
+
+const noop = () => {}
 const eof = (c: WriteCursor, n: number) =>
   fail(ErrorCode.EOF, `Need ${n} bytes, found ${c.buf.byteLength - c.pos}`, c.pos)
 
@@ -86,10 +124,7 @@ const boolUnsafe = () => (c: WriteCursor, v: boolean) => {
 }
 
 const boolSafe = () => (c: WriteCursor, v: boolean) => {
-  if (c.pos + 1 > c.buf.byteLength) {
-    if (c.ensure) c.ensure(2)
-    else return eof(c, 2)
-  }
+  c.ensure(1)
   c.view.setUint8(c.pos, v ? 1 : 0)
   c.pos += 1
 }
@@ -104,10 +139,7 @@ const i8Unsafe = () => (c: WriteCursor, v: number) => {
 }
 
 const i8Safe = () => (c: WriteCursor, v: number) => {
-  if (c.pos + 1 > c.buf.byteLength) {
-    if (c.ensure) c.ensure(2)
-    else return eof(c, 2)
-  }
+  c.ensure(2)
   c.view.setInt8(c.pos, v)
   c.pos += 1
 }
@@ -118,10 +150,7 @@ const u8Unsafe = () => (c: WriteCursor, v: number) => {
 }
 
 const u8Safe = () => (c: WriteCursor, v: number) => {
-  if (c.pos + 1 > c.buf.byteLength) {
-    if (c.ensure) c.ensure(2)
-    else return eof(c, 2)
-  }
+  c.ensure(2)
   c.view.setUint8(c.pos, v)
   c.pos += 1
 }
@@ -141,10 +170,7 @@ const i16Unsafe = (endian?: Endian) => {
 const i16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: number) => {
-    if (c.pos + 2 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(2)
-      else return eof(c, 2)
-    }
+    c.ensure(2)
     c.view.setInt16(c.pos, v, le)
     c.pos += 2
   }
@@ -161,10 +187,7 @@ const u16Unsafe = (endian?: Endian) => {
 const u16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: number) => {
-    if (c.pos + 2 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(2)
-      else return eof(c, 2)
-    }
+    c.ensure(2)
     c.view.setUint16(c.pos, v, le)
     c.pos += 2
   }
@@ -181,10 +204,7 @@ const f16Unsafe = (endian?: Endian) => {
 const f16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: number) => {
-    if (c.pos + 2 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(2)
-      else return eof(c, 2)
-    }
+    c.ensure(2)
     c.view.setFloat16(c.pos, v, le)
     c.pos += 2
   }
@@ -205,10 +225,7 @@ const i32Unsafe = (endian?: Endian) => {
 const i32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: number) => {
-    if (c.pos + 4 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(4)
-      else return eof(c, 4)
-    }
+    c.ensure(4)
     c.view.setInt32(c.pos, v, le)
     c.pos += 4
   }
@@ -225,10 +242,7 @@ const u32Unsafe = (endian?: Endian) => {
 const u32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: number) => {
-    if (c.pos + 4 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(4)
-      else return eof(c, 4)
-    }
+    c.ensure(4)
     c.view.setUint32(c.pos, v, le)
     c.pos += 4
   }
@@ -245,10 +259,7 @@ const f32Unsafe = (endian?: Endian) => {
 const f32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: number) => {
-    if (c.pos + 4 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(4)
-      else return eof(c, 4)
-    }
+    c.ensure(4)
     c.view.setFloat32(c.pos, v, le)
     c.pos += 4
   }
@@ -269,10 +280,7 @@ const i64Unsafe = (endian?: Endian) => {
 const i64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: bigint) => {
-    if (c.pos + 8 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(8)
-      else return eof(c, 8)
-    }
+    c.ensure(8)
     c.view.setBigInt64(c.pos, v, le)
     c.pos += 8
   }
@@ -289,10 +297,7 @@ const u64Unsafe = (endian?: Endian) => {
 const u64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: bigint) => {
-    if (c.pos + 8 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(8)
-      else return eof(c, 8)
-    }
+    c.ensure(8)
     c.view.setBigUint64(c.pos, v, le)
     c.pos += 8
   }
@@ -309,10 +314,7 @@ const f64Unsafe = (endian?: Endian) => {
 const f64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: WriteCursor, v: number) => {
-    if (c.pos + 8 > c.buf.byteLength) {
-      if (c.ensure) c.ensure(8)
-      else return eof(c, 8)
-    }
+    c.ensure(8)
     c.view.setFloat64(c.pos, v, le)
     c.pos += 8
   }
@@ -332,10 +334,7 @@ const strUnsafe = (encoder: TextEncoder) => () => (c: WriteCursor, v: string) =>
 const strSafe = (encoder: TextEncoder) => () => (c: WriteCursor, v: string) => {
   const encoded = encoder.encode(v)
   const needed = 4 + encoded.length
-  if (c.pos + needed > c.buf.byteLength) {
-    if (c.ensure) c.ensure(needed)
-    else return eof(c, needed)
-  }
+  c.ensure(needed)
   c.view.setUint32(c.pos, encoded.length, false) // BE
   c.pos += 4
   c.buf.set(encoded, c.pos)

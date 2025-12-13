@@ -60,6 +60,11 @@ export const createReader = (userOpts?: DecoderOptions): Backend<ReadCursor, 're
           buf: input,
           view: new DataView(input.buffer, input.byteOffset, input.byteLength),
           pos: 0,
+          ensure: opts.boundsCheck
+            ? (bytes: number) => {
+                if (c.pos + bytes > c.buf.byteLength) eof(c, bytes)
+              }
+            : () => {},
         }
         const result = internal(c)
 
@@ -90,7 +95,7 @@ const boolUnsafe = () => (c: ReadCursor) => {
 }
 
 const boolSafe = () => (c: ReadCursor) => {
-  if (c.pos + 1 > c.buf.byteLength) return eof(c, 1)
+  c.ensure(1)
   const v = c.view.getUint8(c.pos)
   c.pos += 1
   return v !== 0
@@ -107,7 +112,7 @@ const i8Unsafe = () => (c: ReadCursor) => {
 }
 
 const i8Safe = () => (c: ReadCursor) => {
-  if (c.pos + 1 > c.buf.byteLength) return eof(c, 1)
+  c.ensure(1)
   const v = c.view.getInt8(c.pos)
   c.pos += 1
   return v
@@ -120,7 +125,7 @@ const u8Unsafe = () => (c: ReadCursor) => {
 }
 
 const u8Safe = () => (c: ReadCursor) => {
-  if (c.pos + 1 > c.buf.byteLength) return eof(c, 1)
+  c.ensure(1)
   const v = c.view.getUint8(c.pos)
   c.pos += 1
   return v
@@ -142,7 +147,7 @@ const i16Unsafe = (endian?: Endian) => {
 const i16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 2 > c.buf.byteLength) return eof(c, 2)
+    c.ensure(2)
     const v = c.view.getInt16(c.pos, le)
     c.pos += 2
     return v
@@ -161,7 +166,7 @@ const u16Unsafe = (endian?: Endian) => {
 const u16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 2 > c.buf.byteLength) return eof(c, 2)
+    c.ensure(2)
     const v = c.view.getUint16(c.pos, le)
     c.pos += 2
     return v
@@ -180,7 +185,7 @@ const f16Unsafe = (endian?: Endian) => {
 const f16Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 2 > c.buf.byteLength) return eof(c, 2)
+    c.ensure(2)
     const v = c.view.getFloat16(c.pos, le)
     c.pos += 2
     return v
@@ -203,7 +208,7 @@ const i32Unsafe = (endian?: Endian) => {
 const i32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 4 > c.buf.byteLength) return eof(c, 4)
+    c.ensure(4)
     const v = c.view.getInt32(c.pos, le)
     c.pos += 4
     return v
@@ -222,7 +227,7 @@ const u32Unsafe = (endian?: Endian) => {
 const u32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 4 > c.buf.byteLength) return eof(c, 4)
+    c.ensure(4)
     const v = c.view.getUint32(c.pos, le)
     c.pos += 4
     return v
@@ -241,7 +246,7 @@ const f32Unsafe = (endian?: Endian) => {
 const f32Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 4 > c.buf.byteLength) return eof(c, 4)
+    c.ensure(4)
     const v = c.view.getFloat32(c.pos, le)
     c.pos += 4
     return v
@@ -264,7 +269,7 @@ const i64Unsafe = (endian?: Endian) => {
 const i64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 8 > c.buf.byteLength) return eof(c, 8)
+    c.ensure(8)
     const v = c.view.getBigInt64(c.pos, le)
     c.pos += 8
     return v
@@ -283,7 +288,7 @@ const u64Unsafe = (endian?: Endian) => {
 const u64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 8 > c.buf.byteLength) return eof(c, 8)
+    c.ensure(8)
     const v = c.view.getBigUint64(c.pos, le)
     c.pos += 8
     return v
@@ -302,7 +307,7 @@ const f64Unsafe = (endian?: Endian) => {
 const f64Safe = (endian?: Endian) => {
   const le = endian === 'le'
   return (c: ReadCursor) => {
-    if (c.pos + 8 > c.buf.byteLength) return eof(c, 8)
+    c.ensure(8)
     const v = c.view.getFloat64(c.pos, le)
     c.pos += 8
     return v
