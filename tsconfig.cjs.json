@@ -1,6 +1,13 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": false, "outDir": "lib/cjs", "module": "commonjs", "moduleResolution": "classic" },
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "./src",
+    "outDir": "lib/cjs",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0"
+  },
   "include": ["src/**/*"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "test/**/*"]
 }

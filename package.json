@@ -1,6 +1,6 @@
 {
   "name": "@lickle/bin",
-  "version": "0.2.0",
+  "version": "0.3.0-dev.0",
   "description": "A tiny, efficient utility for defining binary data schemas and performing encoding/decoding of JavaScript objects to and from Uint8Array",
   "author": "Dan Beaven <dm.beaven@gmail.com>",
   "repository": {
@@ -23,31 +23,49 @@
   },
   "files": [
     "lib",
-    "src",
     "README.md",
     "package.json",
-    "!**/*.test.*",
-    "tsconfig.json"
+    "!**/*.test.*"
   ],
   "keywords": [
     "binary",
     "encoding",
-    "decoding"
+    "decoding",
+    "codec",
+    "serialization",
+    "schema",
+    "bincode",
+    "protobuf"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "npm run typecheck && npm run esm && npm run cjs",
+    "clean": "rm -rf lib",
+    "build": "npm run typecheck && npm run esm && npm run cjs && npm run pkg",
     "format": "prettier --write .",
     "esm": "tsc -p ./tsconfig.esm.json",
     "cjs": "tsc -p ./tsconfig.cjs.json",
+    "pkg": "node -e \"require('fs').writeFileSync('lib/cjs/package.json', JSON.stringify({type:'commonjs'}))\" && node -e \"require('fs').writeFileSync('lib/esm/package.json', JSON.stringify({type:'module'}))\"",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "bench": "tsx bench/bench.ts",
+    "bench:save": "tsx bench/cmp.ts save",
+    "bench:diff": "tsx bench/cmp.ts diff",
+    "sync-version": "node scripts/sync-version.mjs",
+    "version": "npm run sync-version && git add jsr.json",
+    "prepublishOnly": "npm run sync-version && npm run clean && npm run build"
   },
   "devDependencies": {
-    "esbuild": "^0.25.5",
-    "jsr": "^0.13.4",
-    "prettier": "^3.3.3",
-    "typescript": "^5.6.3",
-    "vitest": "^3.0.5"
+    "@mitata/counters": "^0.0.8",
+    "@types/node": "^25.8.0",
+    "esbuild": "^0.28.0",
+    "fast-check": "^4.8.0",
+    "jsr": "^0.14.3",
+    "mitata": "^1.0.34",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
   },
   "prettier": {
     "semi": false,

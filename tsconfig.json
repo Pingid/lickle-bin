@@ -3,17 +3,18 @@
     /* Language and Environment */
     "target": "es2022",
     "lib": ["DOM", "ESNext"],
+    "types": ["node"],
 
     /* Modules */
-    "rootDir": "src" /* Specify the root folder within your source files. */,
+    "rootDir": "." /* Specify the root folder within your source files. */,
     "module": "NodeNext" /* Specify what module code is generated. */,
     "moduleResolution": "nodenext" /* Specify how TypeScript looks up a file from a given module specifier. */,
 
     /* Emit */
     "noEmit": true,
     "declaration": true /* Generate .d.ts files from TypeScript and JavaScript files in your project. */,
-    "declarationMap": true /* Create sourcemaps for d.ts files. */,
     "sourceMap": true /* Create source map files for emitted JavaScript files. */,
+    "inlineSources": true /* Embed source content in sourcemaps so src/ doesn't need to ship in the npm package. */,
     "outDir": "lib/esm" /* Specify an output folder for all emitted files. */,
     "declarationDir": "lib/ts",
 
@@ -45,5 +46,5 @@
     /* Completeness */
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "test/**/*", "bench/**/*"]
 }

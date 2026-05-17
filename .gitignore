@@ -1,9 +1,9 @@
 node_modules
 lib
 .npmrc
+bench/snapshots/
 
 # No dependencies so no lock file requirement
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
 bun.lock
