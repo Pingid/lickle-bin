@@ -4,29 +4,35 @@ import * as Bin from './bin.js'
 import { traceChild } from './rw.js'
 
 /** 1-byte boolean */
-export const bool = (): T.Sized<boolean, boolean, 1> => Bin._bool
+export const bool = <D extends boolean = boolean, E = D>(): T.Sized<D, E, 1> => Bin._bool as any
 /** 1-byte unsigned integer */
-export const uint8 = (): T.Sized<number, number, 1> => Bin._u8c
+export const uint8 = <D extends number = number, E = D>(): T.Sized<D, E, 1> => Bin._u8c as any
 /** 1-byte signed integer */
-export const int8 = (): T.Sized<number, number, 1> => Bin._i8c
+export const int8 = <D extends number = number, E = D>(): T.Sized<D, E, 1> => Bin._i8c as any
 /** 2-byte unsigned integer */
-export const uint16 = (le?: boolean): T.Sized<number, number, 2> => (le ? Bin._u16Le : Bin._u16Be)
+export const uint16 = <D extends number = number, E = D>(le?: boolean): T.Sized<D, E, 2> =>
+  (le ? Bin._u16Le : Bin._u16Be) as any
 /** 2-byte signed integer */
-export const int16 = (le?: boolean): T.Sized<number, number, 2> => (le ? Bin._i16Le : Bin._i16Be)
+export const int16 = <D extends number = number, E = D>(le?: boolean): T.Sized<D, E, 2> =>
+  (le ? Bin._i16Le : Bin._i16Be) as any
 /** 4-byte unsigned integer */
-export const uint32 = (le?: boolean): T.Sized<number, number, 4> => (le ? Bin._u32Le : Bin._u32Be)
+export const uint32 = <D extends number = number, E = D>(le?: boolean): T.Sized<D, E, 4> =>
+  (le ? Bin._u32Le : Bin._u32Be) as any
 /** 4-byte signed integer */
-export const int32 = (le?: boolean): T.Sized<number, number, 4> => (le ? Bin._i32Le : Bin._i32Be)
+export const int32 = <D extends number = number, E = D>(le?: boolean): T.Sized<D, E, 4> =>
+  (le ? Bin._i32Le : Bin._i32Be) as any
 /** 4-byte float */
-export const float32 = (le?: boolean): T.Sized<number, number, 4> => (le ? Bin._f32Le : Bin._f32Be)
+export const float32 = <D extends number = number, E = D>(le?: boolean): T.Sized<D, E, 4> =>
+  (le ? Bin._f32Le : Bin._f32Be) as any
 /** 8-byte signed integer */
 export const bigInt64 = (le?: boolean): T.Sized<bigint, bigint, 8> => (le ? Bin._bi64Le : Bin._bi64Be)
 /** 8-byte unsigned integer */
 export const bigUint64 = (le?: boolean): T.Sized<bigint, bigint, 8> => (le ? Bin._bu64Le : Bin._bu64Be)
 /** 8-byte float */
-export const float64 = (le?: boolean): T.Sized<number, number, 8> => (le ? Bin._f64Le : Bin._f64Be)
+export const float64 = <D extends number = number, E = D>(le?: boolean): T.Sized<D, E, 8> =>
+  (le ? Bin._f64Le : Bin._f64Be) as any
 /** LEB128, 1–5 bytes */
-export const varint = (): T.Codec<number> => Bin._varint
+export const varint = <D extends number = number, E = D>(): T.Codec<D, E> => Bin._varint as any
 
 type LenOpt = { length?: T.Codec<number> }
 /** Length-prefixed bytes; pass `{ size }` for fixed-width, `{ pad: true }` to zero-pad shorter inputs. */
@@ -53,6 +59,34 @@ export const utf8: {
 
 /** Zero-byte codec that always decodes to `value`; useful as a tag in `tagged`. */
 export const literal = <const O>(value: O): T.Literal<O> => ({ s: 0, e: Bin.noop, d: () => value, value })
+
+/** 1-byte sum type over a fixed set of `Literal`s (max 256). */
+export const union = <const T extends T.Literal<any>[]>(
+  ...variants: T
+): T.Sized<T[number]['value'], T[number]['value'], 1> => {
+  if (variants.length === 0) throw new RangeError('union: at least one variant required')
+  if (variants.length > 256) {
+    throw new RangeError(`union: max 256 variants (got ${variants.length}); use b.tagged for larger sums`)
+  }
+  const idx = new Map<unknown, number>(variants.map((v, i) => [v.value, i]))
+  if (idx.size !== variants.length) throw new RangeError('union: duplicate literal values')
+  return {
+    s: 1,
+    e: (w, v) => {
+      const i = idx.get(v)
+      if (i === undefined) throw new RangeError(`union: ${JSON.stringify(v)} is not a member`)
+      Bin._wu8(w, i)
+    },
+    d: (r) => {
+      const i = Bin.ru8(r)
+      const variant = variants[i]
+      if (variant === undefined) {
+        throw new RangeError(`union: tag index ${i} out of bounds [0, ${variants.length})`)
+      }
+      return variant.value as T[number]['value']
+    },
+  }
+}
 
 /** Wraps `inner` with a 1-byte presence prefix; missing fields are encoded as 0 and decoded as `undefined`. */
 export const optional: {

@@ -9,9 +9,11 @@ on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
   release_github:
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -66,7 +68,7 @@ jobs:
       - name: Determine dist-tag
         id: dist_tag
         run: |
-          if [[ "${{ steps.current_version.outputs.version }}" == *-* ]]; then
+          if [[ "${{ github.ref_name }}" == "dev" || "${{ steps.current_version.outputs.version }}" == *-* ]]; then
             echo "tag=dev" >> $GITHUB_OUTPUT
           else
             echo "tag=latest" >> $GITHUB_OUTPUT
@@ -80,6 +82,7 @@ jobs:
         if: ${{ steps.current_version.outputs.version != steps.latest_version.outputs.version }}
         run: npm publish --access public --provenance --tag ${{ steps.dist_tag.outputs.tag }}
   publish_jsr:
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
